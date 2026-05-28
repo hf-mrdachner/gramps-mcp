@@ -8,3 +8,6 @@ __pycache__
 .env
 .claude/src/gramps_mcp.egg-info/
 .coverage
+PR_DRAFT.md
+.claude/
+src/gramps_mcp.egg-info/
