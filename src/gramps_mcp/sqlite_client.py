@@ -99,8 +99,14 @@ class GrampsSqliteClient:
         self._report_cache: Dict[str, str] = {}
 
     async def close(self):
-        """Close the underlying SQLite connection."""
-        self._db.close()
+        """
+        No-op: the connection is managed by the singleton lifecycle.
+
+        Actual cleanup happens via _close_singleton() → _db.close() when
+        close_database() is called explicitly.  Calling this method from the
+        with_client decorator after every tool call must not destroy the
+        connection that the singleton still holds.
+        """
 
     # ------------------------------------------------------------------
     # Public interface  (identical to GrampsWebAPIClient / GrampsDirectClient)

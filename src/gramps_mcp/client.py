@@ -22,6 +22,7 @@ for all Gramps Web API operations through the make_api_call method.
 """
 
 import logging
+import os
 import re
 from typing import Dict, Optional, Union
 from urllib.parse import urljoin

@@ -461,3 +461,29 @@ class TestClientFactory:
     def test_gramps_file_not_sqlite(self):
         from gramps_mcp.client import _is_sqlite_path
         assert not _is_sqlite_path("/some/path/tree.gramps")
+
+
+class TestSqliteCloseNoop:
+    """Regression: with_client calls close() after every tool call.
+
+    GrampsSqliteClient.close() must be a no-op so the singleton connection
+    stays alive across multiple tool calls within the same session.
+    """
+
+    @pytest.mark.asyncio
+    async def test_close_does_not_destroy_connection(self, sqlite_client):
+        """close() must leave the connection usable for the next query."""
+        from gramps_mcp.models.api_calls import ApiCalls
+        await sqlite_client.close()
+        # The connection must still work after close()
+        result = await sqlite_client.make_api_call(ApiCalls.GET_PEOPLE)
+        assert isinstance(result, list)
+
+    @pytest.mark.asyncio
+    async def test_multiple_queries_after_multiple_closes(self, sqlite_client):
+        """Simulates with_client calling close() after each tool call."""
+        from gramps_mcp.models.api_calls import ApiCalls
+        for _ in range(3):
+            await sqlite_client.close()
+            result = await sqlite_client.make_api_call(ApiCalls.GET_PEOPLE)
+            assert isinstance(result, list), "Connection must survive repeated close() calls"

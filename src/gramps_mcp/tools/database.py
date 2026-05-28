@@ -156,7 +156,7 @@ async def close_database_tool(arguments: Dict) -> List[TextContent]:
         msg = (
             f"Database closed: {path}\n\n"
             "You can now safely open this database in Gramps Desktop.\n"
-            "Call reload_database when you are done."
+            "Call open_database when you are done."
         )
     else:
         msg = "No database was open."
