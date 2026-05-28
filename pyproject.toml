@@ -1,3 +1,10 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [project]
 name = "gramps-mcp"
 version = "1.1.0"
@@ -13,6 +20,10 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "uvicorn>=0.23.0",
 ]
+
+[project.scripts]
+gramps-mcp = "gramps_mcp.server:main"
+
 
 [tool.ruff]
 exclude = [

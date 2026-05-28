@@ -71,9 +71,10 @@ No more manual data entry, no context switching between apps, no generic genealo
 
 ### Requirements
 
-- **Gramps Web server** with your family tree data - [Setup Guide](https://www.grampsweb.org/install_setup/setup/)
-- Docker and Docker Compose
-- MCP-compatible AI assistant (Claude Desktop, Cursor, etc.)
+- MCP-compatible AI assistant (Claude Desktop, Cursor, Claude Code, etc.)
+- **One of the two backends** (see [Direct Backend](#direct-backend-local-file-access) below):
+  - **Gramps Web server** — [Setup Guide](https://www.grampsweb.org/install_setup/setup/) — for full read/write access
+  - **Local `.gpkg` / `.gramps` file** — no server or Docker required, read-only
 
 ### Quick Start
 
@@ -123,15 +124,25 @@ The HTTP server will be available at `http://localhost:8000/mcp`, while stdio ru
 
 ### Environment Configuration
 
-Create a `.env` file with your Gramps Web settings:
+Create a `.env` file and choose **one** of the two backends:
 
+**Web backend** (full read/write access via Gramps Web):
 ```bash
-# Your Gramps Web instance (from step 1)
-GRAMPS_API_URL=https://your-gramps-web-domain.com  # Without /api suffix - will be added automatically
+GRAMPS_API_URL=https://your-gramps-web-domain.com  # Without /api suffix
 GRAMPS_USERNAME=your-gramps-web-username
 GRAMPS_PASSWORD=your-gramps-web-password
-GRAMPS_TREE_ID=your-tree-id  # Find this under System Information in Gramps Web
+GRAMPS_TREE_ID=your-tree-id  # System Information in Gramps Web
 ```
+
+**Direct backend** (read-only, no server required):
+```bash
+GRAMPS_DB_PATH=/path/to/your/family-tree.gpkg  # or .gramps file
+```
+
+When `GRAMPS_DB_PATH` is set it takes precedence over the web backend variables.
+The direct backend reads `.gpkg` archives (gzip-compressed Gramps XML) and plain
+`.gramps` XML files using only Python's standard library — no GTK or Gramps
+installation required.
 
 ## MCP Client Configuration
 
@@ -210,26 +221,70 @@ For any other MCP client, use the HTTP transport endpoint:
 }
 ```
 
+## Direct Backend (Local File Access)
+
+The direct backend lets you use Gramps MCP without a running Gramps Web server.
+It reads `.gpkg` or `.gramps` files directly from disk — useful on Windows, in
+offline environments, or anywhere you want zero-infrastructure setup.
+
+### Capabilities
+
+| Feature | Direct backend | Web backend |
+|---|---|---|
+| Search people, families, events, places, … | Yes | Yes |
+| GQL filtering (`find_type` with `gql=`) | Yes (subset) | Yes (full) |
+| Ancestors / descendants traversal | Yes (BFS) | Yes (report) |
+| Create / update records | No (read-only) | Yes |
+| Recent changes | No | Yes |
+
+### GQL Support
+
+The direct backend implements the most common GQL operators:
+
+- Property paths: `primary_name.first_name`
+- Array indexing: `surname_list[0].surname`
+- `.length` pseudo-property: `media_list.length > 0`
+- Operators: `=` `!=` `~` `!~` `>` `>=` `<` `<=`
+- Boolean (truthy check): `media_list`
+- Conjunctions: `and` / `or`
+
+Unsupported pseudo-properties (`any`, `all`, `get_person`, …) are treated as
+non-matching — users see fewer results rather than incorrect ones.
+
+### Setup
+
+```bash
+# Point the server at your .gpkg export from Gramps
+export GRAMPS_DB_PATH=/path/to/family-tree.gpkg
+
+# Run as usual — no web server, no Docker needed
+uv run python -m src.gramps_mcp.server stdio
+```
+
 ## Architecture
 
 ### Core Components
 
 ```
 src/gramps_mcp/
-|-- server.py           # MCP server with HTTP transport
-|-- tools.py            # Tool registry and exports
-|-- client.py           # Gramps Web API client
-|-- models.py           # Pydantic data models
-|-- auth.py             # JWT authentication
-|-- config.py           # Configuration management
-|-- tools/              # Modular tool implementations
+|-- server.py             # MCP server with HTTP transport
+|-- tools.py              # Tool registry and exports
+|-- client.py             # Backend factory + Gramps Web API client
+|-- direct_client.py      # Direct backend (reads .gpkg/.gramps locally)
+|-- _gramps_parsers.py    # Gramps XML element parsers
+|-- _gramps_db.py         # In-memory database built from parsed XML
+|-- _gql.py               # GQL filter engine (subset of Gramps Query Language)
+|-- models.py             # Pydantic data models
+|-- auth.py               # JWT authentication
+|-- config.py             # Configuration management
+|-- tools/                # Modular tool implementations
 |   |-- search_basic.py
 |   |-- search_details.py
 |   |-- data_management.py
 |   |-- tree_management.py
 |   `-- analysis.py
-|-- handlers/           # Data formatting handlers
-`-- client/             # API client modules
+|-- handlers/             # Data formatting handlers
+`-- client/               # API client modules
 ```
 
 ### Technology Stack

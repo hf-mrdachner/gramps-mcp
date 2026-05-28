@@ -341,18 +341,23 @@ async def run_stdio_server():
         )
 
 
-if __name__ == "__main__":
-    # Determine transport type from command line arguments or environment
+def main():
+    """
+    CLI entry point for the gramps-mcp binary.
+
+    Usage:
+        gramps-mcp           # HTTP transport on port 8000
+        gramps-mcp stdio     # stdio transport (for Claude Desktop, Claude Code)
+    """
     transport_type = sys.argv[1] if len(sys.argv) > 1 else "streamable-http"
 
     if transport_type == "stdio":
-        # Run with stdio transport for CLI usage
         asyncio.run(run_stdio_server())
     else:
-        # Run the FastMCP server with streamable HTTP transport
-        # Configure server settings
-        app.settings.host = "0.0.0.0"  # Listen on all interfaces for Docker
+        app.settings.host = "0.0.0.0"
         app.settings.port = 8000
-
-        # Run with streamable-http transport for production use
         app.run(transport="streamable-http")
+
+
+if __name__ == "__main__":
+    main()

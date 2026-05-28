@@ -343,4 +343,23 @@ class GrampsWebAPIClient:
 
 
 # Export the main classes for easy import
-__all__ = ["GrampsWebAPIClient", "GrampsAPIError"]
+__all__ = ["GrampsWebAPIClient", "GrampsAPIError", "get_client"]
+
+
+def get_client():
+    """
+    Return the appropriate client based on the current configuration.
+
+    Uses GrampsDirectClient when GRAMPS_DB_PATH is set, otherwise falls back
+    to GrampsWebAPIClient. Called by the @with_client decorator and any tool
+    that instantiates a client directly.
+
+    Returns:
+        GrampsDirectClient or GrampsWebAPIClient instance.
+    """
+    settings = get_settings()
+    if settings.use_direct_backend:
+        from .direct_client import GrampsDirectClient
+
+        return GrampsDirectClient(settings.gramps_db_path)
+    return GrampsWebAPIClient()
