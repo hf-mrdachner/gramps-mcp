@@ -432,35 +432,9 @@ def sqlite_conn():
 
 @pytest.fixture(scope="session")
 def sqlite_db(sqlite_conn):
-    """GrampsSqliteDB instance backed by the in-memory fixture."""
-    from gramps_mcp._gramps_sqlite import _load_sqlite, GrampsSqliteDB, _normalize_person, _normalize_family, _normalize_generic, _normalize_place
-
-    def _load(table, normalise):
-        rows = sqlite_conn.execute(f"SELECT handle, json_data FROM {table}").fetchall()
-        result = {}
-        for row in rows:
-            raw = json.loads(row["json_data"])
-            obj = normalise(raw)
-            result[obj["handle"]] = obj
-        return result
-
-    people = _load("person", _normalize_person)
-    families = _load("family", _normalize_family)
-    events = _load("event", _normalize_generic)
-    places = _load("place", _normalize_place)
-    sources = _load("source", _normalize_generic)
-    citations = _load("citation", _normalize_generic)
-    notes = _load("note", _normalize_generic)
-    media = _load("media", _normalize_generic)
-    repositories = _load("repository", _normalize_generic)
-
-    return GrampsSqliteDB(
-        conn=sqlite_conn, db_path=":memory:",
-        source_name=":memory:",
-        people=people, families=families, events=events,
-        places=places, sources=sources, citations=citations,
-        notes=notes, media=media, repositories=repositories,
-    )
+    """GrampsSqliteDB backed by the in-memory fixture (lazy-loading)."""
+    from gramps_mcp._gramps_sqlite import GrampsSqliteDB
+    return GrampsSqliteDB(conn=sqlite_conn, db_path=":memory:", read_only=False)
 
 
 @pytest.fixture(scope="session")

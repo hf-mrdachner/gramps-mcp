@@ -254,13 +254,124 @@ def _denorm_date(d: Any) -> Dict:
 
 
 # ---------------------------------------------------------------------------
+# LazyDict — on-demand SQLite proxy replacing the full in-memory dicts
+# ---------------------------------------------------------------------------
+
+
+class LazyDict:
+    """
+    Dict-like proxy that queries SQLite on every access.
+
+    Implements the subset of the dict interface used by
+    :class:`GrampsXmlDB` and its subclasses:
+    ``get``, ``__getitem__``, ``__contains__``, ``__len__``,
+    ``values``, ``__iter__``, ``__setitem__`` (no-op — data lives in DB).
+
+    Every read goes directly to SQLite so the agent always sees the
+    current state of the database without needing a reload.
+    """
+
+    def __init__(self, conn: sqlite3.Connection, table: str, normalise):
+        """
+        Args:
+            conn:      Open SQLite connection (row_factory must be sqlite3.Row).
+            table:     Table name (e.g. ``"person"``).
+            normalise: Callable that converts a raw Gramps JSON dict to our
+                       normalised format.
+        """
+        self._conn = conn
+        self._table = table
+        self._normalise = normalise
+
+    def _fetch_one(self, handle: str) -> Optional[Dict]:
+        """Fetch and normalise a single row by handle, or None."""
+        try:
+            row = self._conn.execute(  # noqa: S608
+                f"SELECT json_data FROM {self._table} WHERE handle=?",
+                (handle,),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return None
+        if row is None:
+            return None
+        try:
+            return self._normalise(json.loads(row["json_data"]))
+        except Exception:
+            return None
+
+    def get(self, handle: Optional[str], default=None):
+        """Return the normalised object for *handle*, or *default*."""
+        if not handle:
+            return default
+        result = self._fetch_one(handle)
+        return result if result is not None else default
+
+    def __getitem__(self, handle: str) -> Dict:
+        result = self._fetch_one(handle)
+        if result is None:
+            raise KeyError(handle)
+        return result
+
+    def __contains__(self, handle: object) -> bool:
+        if not isinstance(handle, str):
+            return False
+        try:
+            row = self._conn.execute(  # noqa: S608
+                f"SELECT 1 FROM {self._table} WHERE handle=?", (handle,)
+            ).fetchone()
+            return row is not None
+        except sqlite3.OperationalError:
+            return False
+
+    def __len__(self) -> int:
+        try:
+            row = self._conn.execute(  # noqa: S608
+                f"SELECT COUNT(*) FROM {self._table}"
+            ).fetchone()
+            return row[0] if row else 0
+        except sqlite3.OperationalError:
+            return 0
+
+    def values(self) -> List[Dict]:
+        """Return all normalised objects from this table."""
+        try:
+            rows = self._conn.execute(  # noqa: S608
+                f"SELECT json_data FROM {self._table}"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []
+        result = []
+        for row in rows:
+            try:
+                result.append(self._normalise(json.loads(row["json_data"])))
+            except Exception:
+                pass
+        return result
+
+    def __iter__(self):
+        try:
+            rows = self._conn.execute(  # noqa: S608
+                f"SELECT handle FROM {self._table}"
+            ).fetchall()
+            return iter(row["handle"] for row in rows)
+        except sqlite3.OperationalError:
+            return iter([])
+
+    def __setitem__(self, handle: str, value: Dict) -> None:
+        """No-op — data is persisted to SQLite by put(), not via dict assignment."""
+
+
+# ---------------------------------------------------------------------------
 # Database loader
 # ---------------------------------------------------------------------------
 
 
 def _load_sqlite(db_path: str, read_only: bool = False) -> "GrampsSqliteDB":
     """
-    Open a Gramps SQLite database and load all objects into memory.
+    Open a Gramps SQLite database and return a lazy-loading DB instance.
+
+    No data is loaded eagerly — every read goes directly to SQLite so
+    the agent always sees the current state without a reload.
 
     Args:
         db_path:   Absolute path to the Gramps ``sqlite.db`` file.
@@ -268,7 +379,7 @@ def _load_sqlite(db_path: str, read_only: bool = False) -> "GrampsSqliteDB":
                    Write attempts will raise :class:`GrampsAPIError`.
 
     Returns:
-        A :class:`GrampsSqliteDB` instance.
+        A :class:`GrampsSqliteDB` instance ready for lazy reads and writes.
 
     Raises:
         GrampsAPIError: If the file cannot be opened or is not a Gramps DB.
@@ -286,47 +397,8 @@ def _load_sqlite(db_path: str, read_only: bool = False) -> "GrampsSqliteDB":
             f"Cannot open Gramps SQLite DB '{db_path}': {exc}"
         ) from exc
 
-    def _load(table: str, normalise) -> Dict[str, Dict]:
-        try:
-            rows = conn.execute(  # noqa: S608
-                f"SELECT handle, json_data FROM {table}"
-            ).fetchall()
-        except sqlite3.OperationalError:
-            logger.debug("Table '%s' not found in database — skipping.", table)
-            return {}
-        result = {}
-        for row in rows:
-            try:
-                raw = json.loads(row["json_data"])
-                obj = normalise(raw)
-                result[obj["handle"]] = obj
-            except Exception:
-                logger.debug("Skipping malformed row in %s: %s", table, row["handle"])
-        return result
-
-    people = _load("person", _normalize_person)
-    families = _load("family", _normalize_family)
-    events = _load("event", _normalize_generic)
-    places = _load("place", _normalize_place)
-    sources = _load("source", _normalize_generic)
-    citations = _load("citation", _normalize_generic)
-    notes = _load("note", _normalize_generic)
-    media = _load("media", _normalize_generic)
-    repositories = _load("repository", _normalize_generic)
-
-    logger.info(
-        "Loaded Gramps SQLite '%s': %d people, %d families, %d events",
-        db_path, len(people), len(families), len(events),
-    )
-
-    return GrampsSqliteDB(
-        conn=conn, db_path=db_path,
-        source_name=db_path,
-        read_only=read_only,
-        people=people, families=families, events=events,
-        places=places, sources=sources, citations=citations,
-        notes=notes, media=media, repositories=repositories,
-    )
+    logger.info("Opened Gramps SQLite '%s' (read_only=%s)", db_path, read_only)
+    return GrampsSqliteDB(conn=conn, db_path=db_path, read_only=read_only)
 
 
 # ---------------------------------------------------------------------------
@@ -336,10 +408,19 @@ def _load_sqlite(db_path: str, read_only: bool = False) -> "GrampsSqliteDB":
 
 class GrampsSqliteDB(GrampsXmlDB):
     """
-    In-memory Gramps database backed by a live SQLite file.
+    Lazy-loading Gramps database backed by a live SQLite file.
 
-    Inherits all read / traversal methods from :class:`GrampsXmlDB`.
-    Adds :meth:`put` for transactional write-through to SQLite.
+    Inherits all read / traversal / timeline methods from
+    :class:`GrampsXmlDB` — they all use ``self.people``,
+    ``self.families``, etc. which are now :class:`LazyDict` instances
+    that query SQLite on every access.
+
+    This means:
+    - No startup delay — nothing is loaded eagerly.
+    - Always fresh data — changes made by Gramps Desktop are visible
+      immediately on the next read without calling ``reload_database``.
+    - Write-through — :meth:`put` writes to SQLite; the next read
+      returns the updated data from the DB.
     """
 
     def __init__(
@@ -347,21 +428,81 @@ class GrampsSqliteDB(GrampsXmlDB):
         conn: sqlite3.Connection,
         db_path: str,
         read_only: bool = False,
-        **kwargs,
+        source_name: str = "",
     ):
         """
-        Initialise with an open SQLite connection and all object dicts.
+        Initialise with an open SQLite connection.
+
+        No data is loaded at construction time — all reads go to SQLite
+        on demand via :class:`LazyDict` proxies.
 
         Args:
-            conn:      Open ``sqlite3.Connection`` to the Gramps database.
-            db_path:   Path to the SQLite file (used for logging).
-            read_only: If True, :meth:`put` raises :class:`GrampsAPIError`.
-            **kwargs:  All keyword args forwarded to :class:`GrampsXmlDB`.
+            conn:        Open ``sqlite3.Connection`` (row_factory=sqlite3.Row).
+            db_path:     Path to the SQLite file (used for logging).
+            read_only:   If True, :meth:`put` raises :class:`GrampsAPIError`.
+            source_name: Display name shown in log messages.
         """
-        super().__init__(**kwargs)
+        # Initialise parent with empty dicts; we replace them immediately.
+        super().__init__(
+            source_name=source_name or db_path,
+            people={}, families={}, events={}, places={},
+            sources={}, citations={}, notes={}, media={}, repositories={},
+        )
         self._conn = conn
         self._db_path = db_path
         self._read_only = read_only
+        self._normalise_map = {
+            "person":     _normalize_person,
+            "family":     _normalize_family,
+            "event":      _normalize_generic,
+            "place":      _normalize_place,
+            "source":     _normalize_generic,
+            "citation":   _normalize_generic,
+            "note":       _normalize_generic,
+            "media":      _normalize_generic,
+            "repository": _normalize_generic,
+        }
+        # Replace static dicts with live SQLite proxies.
+        self.people       = LazyDict(conn, "person",     _normalize_person)
+        self.families     = LazyDict(conn, "family",     _normalize_family)
+        self.events       = LazyDict(conn, "event",      _normalize_generic)
+        self.places       = LazyDict(conn, "place",      _normalize_place)
+        self.sources      = LazyDict(conn, "source",     _normalize_generic)
+        self.citations    = LazyDict(conn, "citation",   _normalize_generic)
+        self.notes        = LazyDict(conn, "note",       _normalize_generic)
+        self.media        = LazyDict(conn, "media",      _normalize_generic)
+        self.repositories = LazyDict(conn, "repository", _normalize_generic)
+
+    def get_by_id(self, obj_type: str, gramps_id: str) -> Optional[Dict]:
+        """
+        Look up an object by Gramps ID using the indexed SQL column.
+
+        Faster than the parent's linear scan through ``values()``.
+
+        Args:
+            obj_type:  One of ``person``, ``family``, ``event``, etc.
+            gramps_id: Gramps ID string, e.g. ``"I0001"``.
+
+        Returns:
+            Normalised dict or ``None`` if not found.
+        """
+        table = _TABLE.get(obj_type)
+        normalise = self._normalise_map.get(obj_type)
+        if not table or not normalise:
+            return None
+        try:
+            row = self._conn.execute(  # noqa: S608
+                f"SELECT json_data FROM {table} WHERE gramps_id=?",
+                (gramps_id,),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return None
+        if row is None:
+            return None
+        try:
+            return normalise(json.loads(row["json_data"]))
+        except Exception:
+            return None
 
     # ------------------------------------------------------------------
     # Handle / ID generation
@@ -402,7 +543,7 @@ class GrampsSqliteDB(GrampsXmlDB):
 
     def put(self, obj_type: str, obj: Dict) -> Dict:
         """
-        Persist an object to SQLite and update the in-memory cache.
+        Persist an object to SQLite.
 
         If ``obj`` has no ``handle``, a new one is generated.
         If ``obj`` has no ``gramps_id``, the next sequential ID is assigned.
@@ -482,7 +623,7 @@ class GrampsSqliteDB(GrampsXmlDB):
                 f"SQLite write error for {obj_type}/{handle}: {exc}"
             ) from exc
 
-        self._store(obj_type)[handle] = obj
+        # No cache to update — next read fetches fresh from SQLite.
         return obj
 
     def close(self):
