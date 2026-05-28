@@ -661,6 +661,36 @@ def _build_gramps_json(obj_type: str, obj: Dict, existing: Optional[Dict]) -> Di
     return base
 
 
+def _denorm_event_ref(eref: Any) -> Any:
+    """Denormalise a single event-ref dict back to Gramps JSON format."""
+    if not isinstance(eref, dict):
+        return eref
+    result = dict(eref)
+    result.setdefault("_class", "EventRef")
+    if isinstance(result.get("role"), str):
+        result["role"] = _denorm_type(result["role"], "EventRoleType")
+    result.setdefault("note_list", [])
+    result.setdefault("attribute_list", [])
+    result.setdefault("private", False)
+    return result
+
+
+def _denorm_child_ref(cref: Any) -> Any:
+    """Denormalise a single child-ref dict back to Gramps JSON format."""
+    if not isinstance(cref, dict):
+        return cref
+    result = dict(cref)
+    result.setdefault("_class", "ChildRef")
+    if isinstance(result.get("frel"), str):
+        result["frel"] = _denorm_type(result["frel"], "ChildRefType")
+    if isinstance(result.get("mrel"), str):
+        result["mrel"] = _denorm_type(result["mrel"], "ChildRefType")
+    result.setdefault("private", False)
+    result.setdefault("citation_list", [])
+    result.setdefault("note_list", [])
+    return result
+
+
 def _merge_into(base: Dict, patch: Dict, obj_type: str) -> None:
     """Apply normalised patch fields onto an existing Gramps JSON base."""
     field_map = _FIELD_PATCH_MAP.get(obj_type, {})
@@ -675,8 +705,12 @@ def _merge_into(base: Dict, patch: Dict, obj_type: str) -> None:
             base[gramps_key] = _denorm_date(val)
         elif key in ("primary_name",):
             base[gramps_key] = _denorm_name(val)
+        elif key == "event_ref_list" and isinstance(val, list):
+            base[gramps_key] = [_denorm_event_ref(e) for e in val]
+        elif key == "child_ref_list" and isinstance(val, list):
+            base[gramps_key] = [_denorm_child_ref(c) for c in val]
         elif isinstance(val, list):
-            base[gramps_key] = val  # pass through handle lists as-is
+            base[gramps_key] = val  # plain handle lists: note_list, citation_list, …
         elif val is not None:
             base[gramps_key] = val
 

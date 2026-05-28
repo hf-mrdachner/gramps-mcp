@@ -37,7 +37,7 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel
 
 from ._gql import gql_match
-from ._gramps_db import _full_name, _load_gpkg, _person_summary
+from ._gramps_db import _load_gpkg
 from .client import GrampsAPIError
 from .models.api_calls import ApiCalls
 
@@ -418,80 +418,9 @@ class GrampsDirectClient:
         return {"file_name": cache_key}
 
     def _traverse_ancestors(self, start: Dict, max_gen: int) -> str:
-        """BFS up the family tree; return HTML."""
-        name = _full_name(start)
-        gid = start["gramps_id"]
-        html = [f"<h1>Ancestors of {name} ({gid})</h1>"]
-        labels = {1: "Parents", 2: "Grandparents", 3: "Great-grandparents"}
-        seen = {start["handle"]}
-        queue = [start]
-
-        for gen in range(1, max_gen + 1):
-            next_level: List[Dict] = []
-            items: List[str] = []
-            for person in queue:
-                for fh in person.get("parent_family_list", []):
-                    fam = self._db.families.get(fh)
-                    if not fam:
-                        continue
-                    for role in ("father_handle", "mother_handle"):
-                        h = fam.get(role, "")
-                        if h and h not in seen:
-                            p = self._db.people.get(h)
-                            if p:
-                                seen.add(h)
-                                next_level.append(p)
-                                items.append(
-                                    f"<li>{_person_summary(p, self._db.events)}</li>"
-                                )
-            if not items:
-                break
-            label = labels.get(gen, f"Generation +{gen}")
-            html.append(
-                f"<h2>Generation {gen} &#8212; {label}</h2>"
-                f"<ul>{''.join(items)}</ul>"
-            )
-            queue = next_level
-
-        if len(html) == 1:
-            html.append("<p>No ancestors found in the database.</p>")
-        return "\n".join(html)
+        """Delegate to GrampsXmlDB.traverse_ancestors (single implementation)."""
+        return self._db.traverse_ancestors(start, max_gen)
 
     def _traverse_descendants(self, start: Dict, max_gen: int) -> str:
-        """BFS down the family tree; return HTML."""
-        name = _full_name(start)
-        gid = start["gramps_id"]
-        html = [f"<h1>Descendants of {name} ({gid})</h1>"]
-        labels = {1: "Children", 2: "Grandchildren", 3: "Great-grandchildren"}
-        seen = {start["handle"]}
-        queue = [start]
-
-        for gen in range(1, max_gen + 1):
-            next_level: List[Dict] = []
-            items: List[str] = []
-            for person in queue:
-                for fh in person.get("family_list", []):
-                    fam = self._db.families.get(fh)
-                    if not fam:
-                        continue
-                    for cref in fam.get("child_ref_list", []):
-                        h = cref.get("ref", "")
-                        if h and h not in seen:
-                            child = self._db.people.get(h)
-                            if child:
-                                seen.add(h)
-                                next_level.append(child)
-                                s = _person_summary(child, self._db.events)
-                                items.append(f"<li>{s}</li>")
-            if not items:
-                break
-            label = labels.get(gen, f"Generation +{gen}")
-            html.append(
-                f"<h2>Generation {gen} &#8212; {label}</h2>"
-                f"<ul>{''.join(items)}</ul>"
-            )
-            queue = next_level
-
-        if len(html) == 1:
-            html.append("<p>No descendants found in the database.</p>")
-        return "\n".join(html)
+        """Delegate to GrampsXmlDB.traverse_descendants (single implementation)."""
+        return self._db.traverse_descendants(start, max_gen)

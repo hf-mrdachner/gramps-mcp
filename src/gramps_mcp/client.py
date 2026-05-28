@@ -468,8 +468,12 @@ def _write_lock(db_path: str) -> None:
     try:
         with open(_lock_path(db_path), "w", encoding="utf-8") as f:
             f.write(content)
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.warning(
+            "Could not write Gramps lock file '%s': %s — "
+            "Gramps Desktop may not see this agent as active.",
+            _lock_path(db_path), exc,
+        )
 
 
 def _clear_lock(db_path: str) -> None:
@@ -644,6 +648,7 @@ def close_database() -> str:
     if path and _is_sqlite_path(path):
         _clear_lock(path)
     _close_singleton()
+    _direct_client_path = ""  # reset so close is idempotent and path is not stale
     return path
 
 

@@ -68,7 +68,10 @@ def with_client(func: Callable) -> Callable:
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
-        client = get_client()
+        try:
+            client = get_client()
+        except GrampsAPIError as exc:
+            return [TextContent(type="text", text=f"Error: {exc}")]
         try:
             return await func(client, *args, **kwargs)
         finally:

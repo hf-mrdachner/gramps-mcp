@@ -97,7 +97,7 @@ class Settings(BaseModel):
     @property
     def use_direct_backend(self) -> bool:
         """Return True when the direct Gramps Python API backend is active."""
-        return self.gramps_db_path is not None
+        return bool(self.gramps_db_path)  # False for None and ""
 
 
 def get_settings() -> Settings:

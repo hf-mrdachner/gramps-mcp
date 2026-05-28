@@ -63,7 +63,7 @@ _OBJ_TYPES = {
 }
 _WRITE_MAP = {
     ApiCalls.POST_PEOPLE: "person", ApiCalls.PUT_PERSON: "person",
-    ApiCalls.POST_FAMILIES: "person", ApiCalls.PUT_FAMILY: "family",
+    ApiCalls.POST_FAMILIES: "family", ApiCalls.PUT_FAMILY: "family",
     ApiCalls.POST_EVENTS: "event", ApiCalls.PUT_EVENT: "event",
     ApiCalls.POST_PLACES: "place", ApiCalls.PUT_PLACE: "place",
     ApiCalls.POST_SOURCES: "source", ApiCalls.PUT_SOURCE: "source",
@@ -72,8 +72,6 @@ _WRITE_MAP = {
     ApiCalls.POST_MEDIA: "media", ApiCalls.PUT_MEDIA_ITEM: "media",
     ApiCalls.POST_REPOSITORIES: "repository", ApiCalls.PUT_REPOSITORY: "repository",
 }
-# Fix POST_FAMILIES mapping
-_WRITE_MAP[ApiCalls.POST_FAMILIES] = "family"
 
 
 class GrampsSqliteClient:
@@ -184,7 +182,10 @@ class GrampsSqliteClient:
         if api_call in _WRITE_MAP:
             obj_type = _WRITE_MAP[api_call]
             is_put = api_call.name.startswith("PUT_")
-            body = params.get("body", params)
+            # Strip MCP query params that must not be persisted as object fields.
+            _meta = {"extend", "pagesize", "page", "gramps_id", "gql",
+                     "query", "name", "search"}
+            body = {k: v for k, v in params.items() if k not in _meta}
             if is_put and handle:
                 body = {**body, "handle": handle}
             return self._db.put(obj_type, body)
@@ -287,6 +288,11 @@ class GrampsSqliteClient:
         gramps_id_filter = params.get("gramps_id", "")
         gql = params.get("gql", "")
 
+        # Fast path: gramps_id is SQL-indexed — skip the full table scan.
+        if gramps_id_filter and not name_filter and not gql:
+            obj = self._db.get_by_id(obj_type, gramps_id_filter)
+            return [obj] if obj else []
+
         results = []
         for obj in self._db.all(obj_type):
             if gramps_id_filter and obj.get("gramps_id") != gramps_id_filter:
@@ -312,7 +318,9 @@ class GrampsSqliteClient:
         if obj_type in ("source", "repository"):
             return query in obj.get("title", obj.get("name", "")).lower()
         if obj_type == "place":
-            return query in obj.get("title", "").lower()
+            return query in obj.get("title", "").lower() or query in obj.get(
+                "name", {}
+            ).get("value", "").lower()
         if obj_type == "note":
             text = obj.get("text", {})
             s = text.get("string", "") if isinstance(text, dict) else str(text)
@@ -398,82 +406,9 @@ class GrampsSqliteClient:
         return {"file_name": cache_key}
 
     def _traverse_ancestors(self, start: Dict, max_gen: int) -> str:
-        from ._gramps_db import _full_name, _person_summary
-
-        name = _full_name(start)
-        gid = start["gramps_id"]
-        html = [f"<h1>Ancestors of {name} ({gid})</h1>"]
-        labels = {1: "Parents", 2: "Grandparents", 3: "Great-grandparents"}
-        seen = {start["handle"]}
-        queue = [start]
-
-        for gen in range(1, max_gen + 1):
-            next_level: List[Dict] = []
-            items: List[str] = []
-            for person in queue:
-                for fh in person.get("parent_family_list", []):
-                    fam = self._db.families.get(fh)
-                    if not fam:
-                        continue
-                    for role in ("father_handle", "mother_handle"):
-                        h = fam.get(role, "")
-                        if h and h not in seen:
-                            p = self._db.people.get(h)
-                            if p:
-                                seen.add(h)
-                                next_level.append(p)
-                                items.append(
-                                    f"<li>{_person_summary(p, self._db.events)}</li>"
-                                )
-            if not items:
-                break
-            label = labels.get(gen, f"Generation +{gen}")
-            html.append(
-                f"<h2>Generation {gen} &#8212; {label}</h2>"
-                f"<ul>{''.join(items)}</ul>"
-            )
-            queue = next_level
-
-        if len(html) == 1:
-            html.append("<p>No ancestors found in the database.</p>")
-        return "\n".join(html)
+        """Delegate to GrampsXmlDB.traverse_ancestors (single implementation)."""
+        return self._db.traverse_ancestors(start, max_gen)
 
     def _traverse_descendants(self, start: Dict, max_gen: int) -> str:
-        from ._gramps_db import _full_name, _person_summary
-
-        name = _full_name(start)
-        gid = start["gramps_id"]
-        html = [f"<h1>Descendants of {name} ({gid})</h1>"]
-        labels = {1: "Children", 2: "Grandchildren", 3: "Great-grandchildren"}
-        seen = {start["handle"]}
-        queue = [start]
-
-        for gen in range(1, max_gen + 1):
-            next_level: List[Dict] = []
-            items: List[str] = []
-            for person in queue:
-                for fh in person.get("family_list", []):
-                    fam = self._db.families.get(fh)
-                    if not fam:
-                        continue
-                    for cref in fam.get("child_ref_list", []):
-                        h = cref.get("ref", "")
-                        if h and h not in seen:
-                            child = self._db.people.get(h)
-                            if child:
-                                seen.add(h)
-                                next_level.append(child)
-                                s = _person_summary(child, self._db.events)
-                                items.append(f"<li>{s}</li>")
-            if not items:
-                break
-            label = labels.get(gen, f"Generation +{gen}")
-            html.append(
-                f"<h2>Generation {gen} &#8212; {label}</h2>"
-                f"<ul>{''.join(items)}</ul>"
-            )
-            queue = next_level
-
-        if len(html) == 1:
-            html.append("<p>No descendants found in the database.</p>")
-        return "\n".join(html)
+        """Delegate to GrampsXmlDB.traverse_descendants (single implementation)."""
+        return self._db.traverse_descendants(start, max_gen)

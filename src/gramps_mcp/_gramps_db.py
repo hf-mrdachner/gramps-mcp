@@ -493,3 +493,86 @@ class GrampsXmlDB:
             "mother": mother,
             "children": children,
         }
+
+    # ------------------------------------------------------------------
+    # BFS traversal (shared by GrampsDirectClient and GrampsSqliteClient)
+    # ------------------------------------------------------------------
+
+    def traverse_ancestors(self, start: Dict, max_gen: int) -> str:
+        """BFS up the family tree; return HTML for html_to_markdown."""
+        name = _full_name(start)
+        gid = start["gramps_id"]
+        html = [f"<h1>Ancestors of {name} ({gid})</h1>"]
+        labels = {1: "Parents", 2: "Grandparents", 3: "Great-grandparents"}
+        seen = {start["handle"]}
+        queue = [start]
+
+        for gen in range(1, max_gen + 1):
+            next_level: List[Dict] = []
+            items: List[str] = []
+            for person in queue:
+                for fh in person.get("parent_family_list", []):
+                    fam = self.families.get(fh)
+                    if not fam:
+                        continue
+                    for role in ("father_handle", "mother_handle"):
+                        h = fam.get(role, "")
+                        if h and h not in seen:
+                            p = self.people.get(h)
+                            if p:
+                                seen.add(h)
+                                next_level.append(p)
+                                items.append(
+                                    f"<li>{_person_summary(p, self.events)}</li>"
+                                )
+            if not items:
+                break
+            label = labels.get(gen, f"Generation +{gen}")
+            html.append(
+                f"<h2>Generation {gen} &#8212; {label}</h2>"
+                f"<ul>{''.join(items)}</ul>"
+            )
+            queue = next_level
+
+        if len(html) == 1:
+            html.append("<p>No ancestors found in the database.</p>")
+        return "\n".join(html)
+
+    def traverse_descendants(self, start: Dict, max_gen: int) -> str:
+        """BFS down the family tree; return HTML for html_to_markdown."""
+        name = _full_name(start)
+        gid = start["gramps_id"]
+        html = [f"<h1>Descendants of {name} ({gid})</h1>"]
+        labels = {1: "Children", 2: "Grandchildren", 3: "Great-grandchildren"}
+        seen = {start["handle"]}
+        queue = [start]
+
+        for gen in range(1, max_gen + 1):
+            next_level: List[Dict] = []
+            items: List[str] = []
+            for person in queue:
+                for fh in person.get("family_list", []):
+                    fam = self.families.get(fh)
+                    if not fam:
+                        continue
+                    for cref in fam.get("child_ref_list", []):
+                        h = cref.get("ref", "")
+                        if h and h not in seen:
+                            child = self.people.get(h)
+                            if child:
+                                seen.add(h)
+                                next_level.append(child)
+                                s = _person_summary(child, self.events)
+                                items.append(f"<li>{s}</li>")
+            if not items:
+                break
+            label = labels.get(gen, f"Generation +{gen}")
+            html.append(
+                f"<h2>Generation {gen} &#8212; {label}</h2>"
+                f"<ul>{''.join(items)}</ul>"
+            )
+            queue = next_level
+
+        if len(html) == 1:
+            html.append("<p>No descendants found in the database.</p>")
+        return "\n".join(html)
