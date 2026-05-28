@@ -343,7 +343,10 @@ class GrampsWebAPIClient:
 
 
 # Export the main classes for easy import
-__all__ = ["GrampsWebAPIClient", "GrampsAPIError", "get_client"]
+__all__ = [
+    "GrampsWebAPIClient", "GrampsAPIError",
+    "get_client", "open_database", "close_database", "reload_database",
+]
 
 
 _direct_client_singleton = None
@@ -395,3 +398,88 @@ def get_client():
             _direct_client_path = path
         return _direct_client_singleton
     return GrampsWebAPIClient()
+
+
+def _close_singleton() -> None:
+    """Close the current singleton's DB connection if it has one."""
+    global _direct_client_singleton
+    if _direct_client_singleton is None:
+        return
+    db = getattr(_direct_client_singleton, "_db", None)
+    if db is not None and hasattr(db, "close"):
+        try:
+            db.close()
+        except Exception:
+            pass
+    _direct_client_singleton = None
+
+
+def open_database(path: str):
+    """
+    Open a Gramps database, replacing any currently active singleton.
+
+    Accepts ``.sqlite`` / ``.db`` files (or directories containing
+    ``sqlite.db``) for full read/write access, or ``.gpkg`` / ``.gramps``
+    files for read-only access.
+
+    Args:
+        path: Absolute path to the database file or directory.
+
+    Returns:
+        The newly created client instance.
+
+    Raises:
+        GrampsAPIError: If the path does not exist or is not recognised.
+    """
+    global _direct_client_singleton, _direct_client_path
+    import os
+    if not os.path.exists(path):
+        raise GrampsAPIError(f"Database path not found: '{path}'")
+    _close_singleton()
+    if _is_sqlite_path(path):
+        from .sqlite_client import GrampsSqliteClient
+        _direct_client_singleton = GrampsSqliteClient(path)
+    else:
+        from .direct_client import GrampsDirectClient
+        _direct_client_singleton = GrampsDirectClient(path)
+    _direct_client_path = path
+    return _direct_client_singleton
+
+
+def close_database() -> str:
+    """
+    Close the current database connection and release the singleton.
+
+    Call this before opening the database in Gramps Desktop so that
+    there are no conflicting SQLite locks.
+
+    Returns:
+        Path of the database that was closed, or empty string if none
+        was open.
+    """
+    global _direct_client_path
+    path = _direct_client_path
+    _close_singleton()
+    return path
+
+
+def reload_database():
+    """
+    Close and immediately reopen the current database from disk.
+
+    Use this after Gramps Desktop has made changes so the agent sees
+    the updated data.
+
+    Returns:
+        The refreshed client instance.
+
+    Raises:
+        GrampsAPIError: If no database is currently open.
+    """
+    path = _direct_client_path
+    if not path:
+        raise GrampsAPIError(
+            "No database currently open. Use open_database first."
+        )
+    _close_singleton()
+    return open_database(path)

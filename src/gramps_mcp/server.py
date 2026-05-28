@@ -52,6 +52,7 @@ from .models.parameters.transactions_params import TransactionHistoryParams
 
 # Import all tool functions
 from .tools import (
+    close_database_tool,
     create_citation_tool,
     create_event_tool,
     create_family_tool,
@@ -66,6 +67,8 @@ from .tools import (
     get_descendants_tool,
     get_recent_changes_tool,
     get_tree_info_tool,
+    open_database_tool,
+    reload_database_tool,
 )
 from .tools.search_basic import find_type_tool
 from .tools.search_details import get_type_tool
@@ -74,6 +77,22 @@ from .tools.search_details import get_type_tool
 # Simple analysis models for tools that use direct dict access
 class TreeInfoParams(BaseModel):
     include_statistics: bool = Field(True, description="Include statistics")
+
+
+class OpenDatabaseParams(BaseModel):
+    path: str = Field(
+        description=(
+            "Absolute path to the Gramps database. "
+            "Accepted formats: "
+            ".sqlite or .db file (read/write, live DB), "
+            "directory containing sqlite.db (read/write), "
+            ".gpkg or .gramps file (read-only)."
+        )
+    )
+
+
+class EmptyParams(BaseModel):
+    """No parameters required."""
 
 
 class DescendantsParams(BaseModel):
@@ -207,6 +226,35 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Get recent changes/modifications to the family tree",
         "schema": TransactionHistoryParams,
         "handler": get_recent_changes_tool,
+    },
+    # Database lifecycle
+    "open_database": {
+        "description": (
+            "Open a Gramps database file or directory. "
+            "SQLite databases support full read/write; "
+            ".gpkg/.gramps files are read-only. "
+            "Replaces any currently open database."
+        ),
+        "schema": OpenDatabaseParams,
+        "handler": open_database_tool,
+    },
+    "close_database": {
+        "description": (
+            "Close the current database connection and release all file locks. "
+            "Call this before opening the database in Gramps Desktop "
+            "to avoid conflicts. Use reload_database to reconnect afterwards."
+        ),
+        "schema": EmptyParams,
+        "handler": close_database_tool,
+    },
+    "reload_database": {
+        "description": (
+            "Reload the current database from disk. "
+            "Use this after Gramps Desktop (or another process) has written "
+            "changes so the agent sees the updated data."
+        ),
+        "schema": EmptyParams,
+        "handler": reload_database_tool,
     },
 }
 
