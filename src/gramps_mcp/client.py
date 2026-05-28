@@ -350,27 +350,48 @@ _direct_client_singleton = None
 _direct_client_path: str = ""
 
 
+def _is_sqlite_path(path: str) -> bool:
+    """Return True if *path* points to a Gramps SQLite database."""
+    import os
+    if path.lower().endswith((".sqlite", ".db")):
+        return True
+    if os.path.isdir(path) and os.path.exists(os.path.join(path, "sqlite.db")):
+        return True
+    return False
+
+
 def get_client():
     """
     Return the appropriate client based on the current configuration.
 
-    Uses GrampsDirectClient when GRAMPS_DB_PATH is set, otherwise falls back
-    to GrampsWebAPIClient. The direct client is cached as a module-level
-    singleton so the .gpkg file is parsed only once per process.
+    Selection logic when ``GRAMPS_DB_PATH`` is set:
+
+    - Path ends in ``.sqlite`` / ``.db``, or is a directory containing
+      ``sqlite.db`` → :class:`GrampsSqliteClient` (read/write, live DB)
+    - Path ends in ``.gpkg`` / ``.gramps`` → :class:`GrampsDirectClient`
+      (read-only, no Gramps installation needed)
+
+    Falls back to :class:`GrampsWebAPIClient` when ``GRAMPS_DB_PATH`` is
+    not set.  All clients are cached as singletons so the database is
+    loaded only once per process.
 
     Returns:
-        GrampsDirectClient or GrampsWebAPIClient instance.
+        The appropriate client instance.
     """
     global _direct_client_singleton, _direct_client_path
     settings = get_settings()
     if settings.use_direct_backend:
-        from .direct_client import GrampsDirectClient
-
+        path = settings.gramps_db_path
         if (
             _direct_client_singleton is None
-            or _direct_client_path != settings.gramps_db_path
+            or _direct_client_path != path
         ):
-            _direct_client_singleton = GrampsDirectClient(settings.gramps_db_path)
-            _direct_client_path = settings.gramps_db_path
+            if _is_sqlite_path(path):
+                from .sqlite_client import GrampsSqliteClient
+                _direct_client_singleton = GrampsSqliteClient(path)
+            else:
+                from .direct_client import GrampsDirectClient
+                _direct_client_singleton = GrampsDirectClient(path)
+            _direct_client_path = path
         return _direct_client_singleton
     return GrampsWebAPIClient()

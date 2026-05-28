@@ -267,3 +267,16 @@ def client(gpkg_path):
     """GrampsDirectClient connected to the fixture."""
     from gramps_mcp.direct_client import GrampsDirectClient
     return GrampsDirectClient(gpkg_path)
+
+
+# ---------------------------------------------------------------------------
+# SQLite fixtures  (imported from conftest_sqlite.py)
+# ---------------------------------------------------------------------------
+
+import sys, os  # noqa: E401
+sys.path.insert(0, os.path.dirname(__file__))
+from conftest_sqlite import (  # noqa: E402
+    sqlite_conn,
+    sqlite_db,
+    sqlite_client,
+)
