@@ -6,4 +6,5 @@ __pycache__
 .ruff_cache
 .pytest_cache
 .env
-.claude/
+.claude/src/gramps_mcp.egg-info/
+.coverage
