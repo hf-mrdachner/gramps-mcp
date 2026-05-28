@@ -1057,3 +1057,73 @@ class TestTimeline:
         # John born 1950, Jane born 1952, married 1975, John died 2020
         years = [int(e["date"]) for e in result if e["date"].isdigit()]
         assert years == sorted(years)
+
+
+# ===========================================================================
+# open_database / close_database lifecycle for XML/gpkg backend
+# ===========================================================================
+
+
+class TestXmlOpenCloseLifecycle:
+    def test_open_gpkg_via_factory(self, gpkg_path):
+        """open_database() returns a GrampsDirectClient for .gpkg paths."""
+        from gramps_mcp.client import open_database, close_database
+        client, locked_by = open_database(gpkg_path)
+        assert client is not None
+        assert locked_by == ""  # no lock for XML files
+        close_database()
+
+    def test_open_gpkg_mode_is_readonly(self, gpkg_path):
+        """GrampsDirectClient has no _conn attribute (not SQLite)."""
+        from gramps_mcp.client import open_database, close_database
+        client, _ = open_database(gpkg_path)
+        assert not hasattr(client._db, "_conn")
+        close_database()
+
+    def test_close_gpkg_returns_path(self, gpkg_path):
+        """close_database() returns the path that was open."""
+        from gramps_mcp.client import open_database, close_database
+        open_database(gpkg_path)
+        path = close_database()
+        assert path == gpkg_path
+
+    def test_close_gpkg_no_lock_file_created(self, gpkg_path):
+        """Opening a .gpkg must not create a lock file alongside it."""
+        import os
+        from gramps_mcp.client import open_database, close_database
+        lock_path = os.path.join(os.path.dirname(gpkg_path), "lock")
+        open_database(gpkg_path)
+        assert not os.path.exists(lock_path), "Lock file must not be created for XML"
+        close_database()
+
+    def test_get_client_after_open(self, gpkg_path):
+        """get_client() returns the singleton set by open_database."""
+        from gramps_mcp.client import open_database, close_database, get_client
+        opened_client, _ = open_database(gpkg_path)
+        fetched = get_client()
+        assert fetched is opened_client
+        close_database()
+
+    def test_get_client_after_close_raises(self, gpkg_path, monkeypatch):
+        """After close_database, get_client raises if no env var is set."""
+        from gramps_mcp.client import open_database, close_database, get_client, GrampsAPIError
+        import gramps_mcp.client as client_mod
+        open_database(gpkg_path)
+        close_database()
+        # Patch settings to have no backend configured
+        class _EmptySettings:
+            use_direct_backend = False
+            gramps_api_url = None
+            gramps_db_path = None
+        monkeypatch.setattr(client_mod, "get_settings", lambda: _EmptySettings())
+        with pytest.raises(GrampsAPIError, match="No database connected"):
+            get_client()
+
+    @pytest.mark.asyncio
+    async def test_write_raises_for_xml(self, gpkg_path):
+        """POST operations raise GrampsAPIError for the read-only XML backend."""
+        from gramps_mcp.client import open_database, close_database, GrampsAPIError
+        client, _ = open_database(gpkg_path)
+        with pytest.raises(GrampsAPIError, match="write access"):
+            await client.make_api_call(ApiCalls.POST_PEOPLE, params={})
+        close_database()

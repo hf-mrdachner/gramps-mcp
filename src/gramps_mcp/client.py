@@ -630,8 +630,10 @@ def close_database() -> str:
     """
     Close the current database connection and release the singleton.
 
-    Also removes the ``lock`` file written by :func:`open_database` so
-    Gramps Desktop can open the database without a conflict warning.
+    For SQLite databases, also removes the Gramps lock file written by
+    :func:`open_database` so Gramps Desktop can open cleanly.
+    For XML/gpkg files, the lock step is skipped (no lock is written for
+    read-only backends).
 
     Returns:
         Path of the database that was closed, or empty string if none
@@ -639,7 +641,7 @@ def close_database() -> str:
     """
     global _direct_client_path
     path = _direct_client_path
-    if path:
+    if path and _is_sqlite_path(path):
         _clear_lock(path)
     _close_singleton()
     return path
