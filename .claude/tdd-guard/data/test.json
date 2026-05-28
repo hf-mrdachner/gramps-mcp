@@ -1,0 +1,1319 @@
+{
+  "testModules": [
+    {
+      "moduleId": "tests/test_direct_client.py",
+      "tests": [
+        {
+          "name": "test_count",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_count",
+          "state": "passed"
+        },
+        {
+          "name": "test_basic_fields",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_basic_fields",
+          "state": "passed"
+        },
+        {
+          "name": "test_gender_male",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_gender_male",
+          "state": "passed"
+        },
+        {
+          "name": "test_gender_female",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_gender_female",
+          "state": "passed"
+        },
+        {
+          "name": "test_gender_unknown",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_gender_unknown",
+          "state": "passed"
+        },
+        {
+          "name": "test_name_first_and_surname",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_name_first_and_surname",
+          "state": "passed"
+        },
+        {
+          "name": "test_name_suffix",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_name_suffix",
+          "state": "passed"
+        },
+        {
+          "name": "test_name_call_and_nick",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_name_call_and_nick",
+          "state": "passed"
+        },
+        {
+          "name": "test_name_title",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_name_title",
+          "state": "passed"
+        },
+        {
+          "name": "test_name_type",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_name_type",
+          "state": "passed"
+        },
+        {
+          "name": "test_birth_ref_index",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_birth_ref_index",
+          "state": "passed"
+        },
+        {
+          "name": "test_death_ref_index",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_death_ref_index",
+          "state": "passed"
+        },
+        {
+          "name": "test_no_death_event",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_no_death_event",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_list",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_family_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_parent_family_list",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_parent_family_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_note_list",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_note_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_citation_list",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_citation_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_media_list",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_media_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_urls",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_urls",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_ref_role",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_event_ref_role",
+          "state": "passed"
+        },
+        {
+          "name": "test_get_by_gramps_id",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_get_by_gramps_id",
+          "state": "passed"
+        },
+        {
+          "name": "test_missing_handle_returns_none",
+          "fullName": "tests/test_direct_client.py::TestPersonParsing::test_missing_handle_returns_none",
+          "state": "passed"
+        },
+        {
+          "name": "test_count",
+          "fullName": "tests/test_direct_client.py::TestEventParsing::test_count",
+          "state": "passed"
+        },
+        {
+          "name": "test_basic_fields",
+          "fullName": "tests/test_direct_client.py::TestEventParsing::test_basic_fields",
+          "state": "passed"
+        },
+        {
+          "name": "test_dateval_simple",
+          "fullName": "tests/test_direct_client.py::TestEventParsing::test_dateval_simple",
+          "state": "passed"
+        },
+        {
+          "name": "test_dateval_about_estimated",
+          "fullName": "tests/test_direct_client.py::TestEventParsing::test_dateval_about_estimated",
+          "state": "passed"
+        },
+        {
+          "name": "test_daterange",
+          "fullName": "tests/test_direct_client.py::TestEventParsing::test_daterange",
+          "state": "passed"
+        },
+        {
+          "name": "test_datespan",
+          "fullName": "tests/test_direct_client.py::TestEventParsing::test_datespan",
+          "state": "passed"
+        },
+        {
+          "name": "test_datestr",
+          "fullName": "tests/test_direct_client.py::TestEventParsing::test_datestr",
+          "state": "passed"
+        },
+        {
+          "name": "test_place_handle",
+          "fullName": "tests/test_direct_client.py::TestEventParsing::test_place_handle",
+          "state": "passed"
+        },
+        {
+          "name": "test_no_place",
+          "fullName": "tests/test_direct_client.py::TestEventParsing::test_no_place",
+          "state": "passed"
+        },
+        {
+          "name": "test_description",
+          "fullName": "tests/test_direct_client.py::TestEventParsing::test_description",
+          "state": "passed"
+        },
+        {
+          "name": "test_no_description",
+          "fullName": "tests/test_direct_client.py::TestEventParsing::test_no_description",
+          "state": "passed"
+        },
+        {
+          "name": "test_count",
+          "fullName": "tests/test_direct_client.py::TestFamilyParsing::test_count",
+          "state": "passed"
+        },
+        {
+          "name": "test_basic_fields",
+          "fullName": "tests/test_direct_client.py::TestFamilyParsing::test_basic_fields",
+          "state": "passed"
+        },
+        {
+          "name": "test_parents",
+          "fullName": "tests/test_direct_client.py::TestFamilyParsing::test_parents",
+          "state": "passed"
+        },
+        {
+          "name": "test_children",
+          "fullName": "tests/test_direct_client.py::TestFamilyParsing::test_children",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_refs",
+          "fullName": "tests/test_direct_client.py::TestFamilyParsing::test_event_refs",
+          "state": "passed"
+        },
+        {
+          "name": "test_note_list",
+          "fullName": "tests/test_direct_client.py::TestFamilyParsing::test_note_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_count",
+          "fullName": "tests/test_direct_client.py::TestPlaceParsing::test_count",
+          "state": "passed"
+        },
+        {
+          "name": "test_title",
+          "fullName": "tests/test_direct_client.py::TestPlaceParsing::test_title",
+          "state": "passed"
+        },
+        {
+          "name": "test_name_value",
+          "fullName": "tests/test_direct_client.py::TestPlaceParsing::test_name_value",
+          "state": "passed"
+        },
+        {
+          "name": "test_place_type",
+          "fullName": "tests/test_direct_client.py::TestPlaceParsing::test_place_type",
+          "state": "passed"
+        },
+        {
+          "name": "test_placeref",
+          "fullName": "tests/test_direct_client.py::TestPlaceParsing::test_placeref",
+          "state": "passed"
+        },
+        {
+          "name": "test_no_placeref",
+          "fullName": "tests/test_direct_client.py::TestPlaceParsing::test_no_placeref",
+          "state": "passed"
+        },
+        {
+          "name": "test_url",
+          "fullName": "tests/test_direct_client.py::TestPlaceParsing::test_url",
+          "state": "passed"
+        },
+        {
+          "name": "test_count",
+          "fullName": "tests/test_direct_client.py::TestSourceParsing::test_count",
+          "state": "passed"
+        },
+        {
+          "name": "test_fields",
+          "fullName": "tests/test_direct_client.py::TestSourceParsing::test_fields",
+          "state": "passed"
+        },
+        {
+          "name": "test_reporef_list_present",
+          "fullName": "tests/test_direct_client.py::TestSourceParsing::test_reporef_list_present",
+          "state": "passed"
+        },
+        {
+          "name": "test_reporef_list_ref",
+          "fullName": "tests/test_direct_client.py::TestSourceParsing::test_reporef_list_ref",
+          "state": "passed"
+        },
+        {
+          "name": "test_reporef_callno_and_medium",
+          "fullName": "tests/test_direct_client.py::TestSourceParsing::test_reporef_callno_and_medium",
+          "state": "passed"
+        },
+        {
+          "name": "test_source_media_list",
+          "fullName": "tests/test_direct_client.py::TestSourceParsing::test_source_media_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_count",
+          "fullName": "tests/test_direct_client.py::TestCitationParsing::test_count",
+          "state": "passed"
+        },
+        {
+          "name": "test_fields",
+          "fullName": "tests/test_direct_client.py::TestCitationParsing::test_fields",
+          "state": "passed"
+        },
+        {
+          "name": "test_date",
+          "fullName": "tests/test_direct_client.py::TestCitationParsing::test_date",
+          "state": "passed"
+        },
+        {
+          "name": "test_note_list",
+          "fullName": "tests/test_direct_client.py::TestCitationParsing::test_note_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_count",
+          "fullName": "tests/test_direct_client.py::TestNoteParsing::test_count",
+          "state": "passed"
+        },
+        {
+          "name": "test_fields",
+          "fullName": "tests/test_direct_client.py::TestNoteParsing::test_fields",
+          "state": "passed"
+        },
+        {
+          "name": "test_count",
+          "fullName": "tests/test_direct_client.py::TestMediaParsing::test_count",
+          "state": "passed"
+        },
+        {
+          "name": "test_fields",
+          "fullName": "tests/test_direct_client.py::TestMediaParsing::test_fields",
+          "state": "passed"
+        },
+        {
+          "name": "test_count",
+          "fullName": "tests/test_direct_client.py::TestRepositoryParsing::test_count",
+          "state": "passed"
+        },
+        {
+          "name": "test_fields",
+          "fullName": "tests/test_direct_client.py::TestRepositoryParsing::test_fields",
+          "state": "passed"
+        },
+        {
+          "name": "test_urls",
+          "fullName": "tests/test_direct_client.py::TestRepositoryParsing::test_urls",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_extended_events",
+          "fullName": "tests/test_direct_client.py::TestExtendedBlocks::test_person_extended_events",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_extended_families",
+          "fullName": "tests/test_direct_client.py::TestExtendedBlocks::test_person_extended_families",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_extended_parent_families",
+          "fullName": "tests/test_direct_client.py::TestExtendedBlocks::test_person_extended_parent_families",
+          "state": "passed"
+        },
+        {
+          "name": "test_child_extended_parent_families",
+          "fullName": "tests/test_direct_client.py::TestExtendedBlocks::test_child_extended_parent_families",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_extended_events",
+          "fullName": "tests/test_direct_client.py::TestExtendedBlocks::test_family_extended_events",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_extended_parents",
+          "fullName": "tests/test_direct_client.py::TestExtendedBlocks::test_family_extended_parents",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_extended_children",
+          "fullName": "tests/test_direct_client.py::TestExtendedBlocks::test_family_extended_children",
+          "state": "passed"
+        },
+        {
+          "name": "test_get_person",
+          "fullName": "tests/test_direct_client.py::TestApiGetSingle::test_get_person",
+          "state": "passed"
+        },
+        {
+          "name": "test_get_person_with_extended",
+          "fullName": "tests/test_direct_client.py::TestApiGetSingle::test_get_person_with_extended",
+          "state": "passed"
+        },
+        {
+          "name": "test_get_family_with_extended",
+          "fullName": "tests/test_direct_client.py::TestApiGetSingle::test_get_family_with_extended",
+          "state": "passed"
+        },
+        {
+          "name": "test_get_missing_handle_raises",
+          "fullName": "tests/test_direct_client.py::TestApiGetSingle::test_get_missing_handle_raises",
+          "state": "passed"
+        },
+        {
+          "name": "test_get_missing_handle_arg_raises",
+          "fullName": "tests/test_direct_client.py::TestApiGetSingle::test_get_missing_handle_arg_raises",
+          "state": "passed"
+        },
+        {
+          "name": "test_list_all_people",
+          "fullName": "tests/test_direct_client.py::TestApiGetList::test_list_all_people",
+          "state": "passed"
+        },
+        {
+          "name": "test_filter_by_gramps_id",
+          "fullName": "tests/test_direct_client.py::TestApiGetList::test_filter_by_gramps_id",
+          "state": "passed"
+        },
+        {
+          "name": "test_name_filter",
+          "fullName": "tests/test_direct_client.py::TestApiGetList::test_name_filter",
+          "state": "passed"
+        },
+        {
+          "name": "test_pagination_page1",
+          "fullName": "tests/test_direct_client.py::TestApiGetList::test_pagination_page1",
+          "state": "passed"
+        },
+        {
+          "name": "test_pagination_page2",
+          "fullName": "tests/test_direct_client.py::TestApiGetList::test_pagination_page2",
+          "state": "passed"
+        },
+        {
+          "name": "test_list_events",
+          "fullName": "tests/test_direct_client.py::TestApiGetList::test_list_events",
+          "state": "passed"
+        },
+        {
+          "name": "test_list_places",
+          "fullName": "tests/test_direct_client.py::TestApiGetList::test_list_places",
+          "state": "passed"
+        },
+        {
+          "name": "test_search_by_surname",
+          "fullName": "tests/test_direct_client.py::TestApiSearch::test_search_by_surname",
+          "state": "passed"
+        },
+        {
+          "name": "test_search_empty_query",
+          "fullName": "tests/test_direct_client.py::TestApiSearch::test_search_empty_query",
+          "state": "passed"
+        },
+        {
+          "name": "test_search_place",
+          "fullName": "tests/test_direct_client.py::TestApiSearch::test_search_place",
+          "state": "passed"
+        },
+        {
+          "name": "test_tree_info",
+          "fullName": "tests/test_direct_client.py::TestApiTreeInfo::test_tree_info",
+          "state": "passed"
+        },
+        {
+          "name": "test_tree_info_name",
+          "fullName": "tests/test_direct_client.py::TestApiTreeInfo::test_tree_info_name",
+          "state": "passed"
+        },
+        {
+          "name": "test_post_people_raises",
+          "fullName": "tests/test_direct_client.py::TestApiWriteNotSupported::test_post_people_raises",
+          "state": "passed"
+        },
+        {
+          "name": "test_put_person_raises",
+          "fullName": "tests/test_direct_client.py::TestApiWriteNotSupported::test_put_person_raises",
+          "state": "passed"
+        },
+        {
+          "name": "test_with_headers",
+          "fullName": "tests/test_direct_client.py::TestApiWriteNotSupported::test_with_headers",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_person",
+          "fullName": "tests/test_direct_client.py::TestHandlers::test_format_person",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_person_death",
+          "fullName": "tests/test_direct_client.py::TestHandlers::test_format_person_death",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_family",
+          "fullName": "tests/test_direct_client.py::TestHandlers::test_format_family",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_family_children",
+          "fullName": "tests/test_direct_client.py::TestHandlers::test_format_family_children",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_place_inline",
+          "fullName": "tests/test_direct_client.py::TestHandlers::test_format_place_inline",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_place_with_hierarchy",
+          "fullName": "tests/test_direct_client.py::TestHandlers::test_format_place_with_hierarchy",
+          "state": "passed"
+        },
+        {
+          "name": "test_address_list_present",
+          "fullName": "tests/test_direct_client.py::TestAddressParsing::test_address_list_present",
+          "state": "passed"
+        },
+        {
+          "name": "test_address_list_length",
+          "fullName": "tests/test_direct_client.py::TestAddressParsing::test_address_list_length",
+          "state": "passed"
+        },
+        {
+          "name": "test_address_street",
+          "fullName": "tests/test_direct_client.py::TestAddressParsing::test_address_street",
+          "state": "passed"
+        },
+        {
+          "name": "test_address_city",
+          "fullName": "tests/test_direct_client.py::TestAddressParsing::test_address_city",
+          "state": "passed"
+        },
+        {
+          "name": "test_address_empty_fields",
+          "fullName": "tests/test_direct_client.py::TestAddressParsing::test_address_empty_fields",
+          "state": "passed"
+        },
+        {
+          "name": "test_address_no_date",
+          "fullName": "tests/test_direct_client.py::TestAddressParsing::test_address_no_date",
+          "state": "passed"
+        },
+        {
+          "name": "test_address_no_notes",
+          "fullName": "tests/test_direct_client.py::TestAddressParsing::test_address_no_notes",
+          "state": "passed"
+        },
+        {
+          "name": "test_address_on_testiane",
+          "fullName": "tests/test_direct_client.py::TestAddressParsing::test_address_on_testiane",
+          "state": "passed"
+        },
+        {
+          "name": "test_no_address_on_john",
+          "fullName": "tests/test_direct_client.py::TestAddressParsing::test_no_address_on_john",
+          "state": "passed"
+        },
+        {
+          "name": "test_testor_name",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_testor_name",
+          "state": "passed"
+        },
+        {
+          "name": "test_testiane_name",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_testiane_name",
+          "state": "passed"
+        },
+        {
+          "name": "test_testor_gender",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_testor_gender",
+          "state": "passed"
+        },
+        {
+          "name": "test_testiane_gender",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_testiane_gender",
+          "state": "passed"
+        },
+        {
+          "name": "test_testor_in_test_family",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_testor_in_test_family",
+          "state": "passed"
+        },
+        {
+          "name": "test_testiane_in_test_family",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_testiane_in_test_family",
+          "state": "passed"
+        },
+        {
+          "name": "test_test_family_has_two_children",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_test_family_has_two_children",
+          "state": "passed"
+        },
+        {
+          "name": "test_test_family_children_handles",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_test_family_children_handles",
+          "state": "passed"
+        },
+        {
+          "name": "test_test_family_no_parents",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_test_family_no_parents",
+          "state": "passed"
+        },
+        {
+          "name": "test_test_family_relationship",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_test_family_relationship",
+          "state": "passed"
+        },
+        {
+          "name": "test_testor_birth_event",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_testor_birth_event",
+          "state": "passed"
+        },
+        {
+          "name": "test_testiane_birth_event",
+          "fullName": "tests/test_direct_client.py::TestTestSiblings::test_testiane_birth_event",
+          "state": "passed"
+        },
+        {
+          "name": "test_gql_gender_male",
+          "fullName": "tests/test_direct_client.py::TestGqlFiltering::test_gql_gender_male",
+          "state": "passed"
+        },
+        {
+          "name": "test_gql_gender_female",
+          "fullName": "tests/test_direct_client.py::TestGqlFiltering::test_gql_gender_female",
+          "state": "passed"
+        },
+        {
+          "name": "test_gql_surname_contains",
+          "fullName": "tests/test_direct_client.py::TestGqlFiltering::test_gql_surname_contains",
+          "state": "passed"
+        },
+        {
+          "name": "test_gql_gramps_id_equals",
+          "fullName": "tests/test_direct_client.py::TestGqlFiltering::test_gql_gramps_id_equals",
+          "state": "passed"
+        },
+        {
+          "name": "test_gql_media_length",
+          "fullName": "tests/test_direct_client.py::TestGqlFiltering::test_gql_media_length",
+          "state": "passed"
+        },
+        {
+          "name": "test_gql_and",
+          "fullName": "tests/test_direct_client.py::TestGqlFiltering::test_gql_and",
+          "state": "passed"
+        },
+        {
+          "name": "test_gql_or",
+          "fullName": "tests/test_direct_client.py::TestGqlFiltering::test_gql_or",
+          "state": "passed"
+        },
+        {
+          "name": "test_gql_empty_returns_all",
+          "fullName": "tests/test_direct_client.py::TestGqlFiltering::test_gql_empty_returns_all",
+          "state": "passed"
+        },
+        {
+          "name": "test_gql_address_city",
+          "fullName": "tests/test_direct_client.py::TestGqlFiltering::test_gql_address_city",
+          "state": "passed"
+        },
+        {
+          "name": "test_descendants_report_filename",
+          "fullName": "tests/test_direct_client.py::TestTraversal::test_descendants_report_filename",
+          "state": "passed"
+        },
+        {
+          "name": "test_descendants_contains_child",
+          "fullName": "tests/test_direct_client.py::TestTraversal::test_descendants_contains_child",
+          "state": "passed"
+        },
+        {
+          "name": "test_descendants_header",
+          "fullName": "tests/test_direct_client.py::TestTraversal::test_descendants_header",
+          "state": "passed"
+        },
+        {
+          "name": "test_ancestors_contains_parents",
+          "fullName": "tests/test_direct_client.py::TestTraversal::test_ancestors_contains_parents",
+          "state": "passed"
+        },
+        {
+          "name": "test_ancestors_no_parents_message",
+          "fullName": "tests/test_direct_client.py::TestTraversal::test_ancestors_no_parents_message",
+          "state": "passed"
+        },
+        {
+          "name": "test_report_cache_idempotent_get",
+          "fullName": "tests/test_direct_client.py::TestTraversal::test_report_cache_idempotent_get",
+          "state": "passed"
+        },
+        {
+          "name": "test_unsupported_report_id_raises",
+          "fullName": "tests/test_direct_client.py::TestTraversal::test_unsupported_report_id_raises",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_timeline_is_list",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_person_timeline_is_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_timeline_own_events",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_person_timeline_own_events",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_timeline_includes_family_event",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_person_timeline_includes_family_event",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_timeline_self_relationship",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_person_timeline_self_relationship",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_timeline_place_display_name",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_person_timeline_place_display_name",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_timeline_sorted_birth_before_death",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_person_timeline_sorted_birth_before_death",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_timeline_marriage_shows_spouse",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_person_timeline_marriage_shows_spouse",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_timeline_missing_handle_raises",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_person_timeline_missing_handle_raises",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_timeline_is_list",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_family_timeline_is_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_timeline_includes_marriage",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_family_timeline_includes_marriage",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_timeline_includes_parent_events",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_family_timeline_includes_parent_events",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_timeline_father_relationship",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_family_timeline_father_relationship",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_timeline_sorted",
+          "fullName": "tests/test_direct_client.py::TestTimeline::test_family_timeline_sorted",
+          "state": "passed"
+        }
+      ]
+    },
+    {
+      "moduleId": "tests/test_sqlite_client.py",
+      "tests": [
+        {
+          "name": "test_event_type_is_string",
+          "fullName": "tests/test_sqlite_client.py::TestNormalisation::test_event_type_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_death_type_is_string",
+          "fullName": "tests/test_sqlite_client.py::TestNormalisation::test_death_type_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_marriage_type_is_string",
+          "fullName": "tests/test_sqlite_client.py::TestNormalisation::test_marriage_type_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_has_relationship_not_type",
+          "fullName": "tests/test_sqlite_client.py::TestNormalisation::test_family_has_relationship_not_type",
+          "state": "passed"
+        },
+        {
+          "name": "test_date_has_string_not_text",
+          "fullName": "tests/test_sqlite_client.py::TestNormalisation::test_date_has_string_not_text",
+          "state": "passed"
+        },
+        {
+          "name": "test_date_dateval",
+          "fullName": "tests/test_sqlite_client.py::TestNormalisation::test_date_dateval",
+          "state": "passed"
+        },
+        {
+          "name": "test_no_class_keys_in_person",
+          "fullName": "tests/test_sqlite_client.py::TestNormalisation::test_no_class_keys_in_person",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_ref_role_is_string",
+          "fullName": "tests/test_sqlite_client.py::TestNormalisation::test_event_ref_role_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_child_ref_frel_is_string",
+          "fullName": "tests/test_sqlite_client.py::TestNormalisation::test_child_ref_frel_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_get_by_handle",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_get_by_handle",
+          "state": "passed"
+        },
+        {
+          "name": "test_get_by_gramps_id",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_get_by_gramps_id",
+          "state": "passed"
+        },
+        {
+          "name": "test_missing_returns_none",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_missing_returns_none",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_name",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_person_name",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_gender",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_person_gender",
+          "state": "passed"
+        },
+        {
+          "name": "test_birth_ref_index",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_birth_ref_index",
+          "state": "passed"
+        },
+        {
+          "name": "test_death_ref_index",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_death_ref_index",
+          "state": "passed"
+        },
+        {
+          "name": "test_no_death_for_jane",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_no_death_for_jane",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_list",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_family_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_parent_family_list",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_parent_family_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_media_list",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_media_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_count",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_count",
+          "state": "passed"
+        },
+        {
+          "name": "test_all",
+          "fullName": "tests/test_sqlite_client.py::TestReadPerson::test_all",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_place_handle",
+          "fullName": "tests/test_sqlite_client.py::TestReadEvent::test_event_place_handle",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_no_place",
+          "fullName": "tests/test_sqlite_client.py::TestReadEvent::test_event_no_place",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_count",
+          "fullName": "tests/test_sqlite_client.py::TestReadEvent::test_event_count",
+          "state": "passed"
+        },
+        {
+          "name": "test_parents",
+          "fullName": "tests/test_sqlite_client.py::TestReadFamily::test_parents",
+          "state": "passed"
+        },
+        {
+          "name": "test_children",
+          "fullName": "tests/test_sqlite_client.py::TestReadFamily::test_children",
+          "state": "passed"
+        },
+        {
+          "name": "test_place_title",
+          "fullName": "tests/test_sqlite_client.py::TestReadPlace::test_place_title",
+          "state": "passed"
+        },
+        {
+          "name": "test_place_type",
+          "fullName": "tests/test_sqlite_client.py::TestReadPlace::test_place_type",
+          "state": "passed"
+        },
+        {
+          "name": "test_get_person",
+          "fullName": "tests/test_sqlite_client.py::TestApiRead::test_get_person",
+          "state": "passed"
+        },
+        {
+          "name": "test_get_person_extended",
+          "fullName": "tests/test_sqlite_client.py::TestApiRead::test_get_person_extended",
+          "state": "passed"
+        },
+        {
+          "name": "test_get_family_extended",
+          "fullName": "tests/test_sqlite_client.py::TestApiRead::test_get_family_extended",
+          "state": "passed"
+        },
+        {
+          "name": "test_missing_handle_raises",
+          "fullName": "tests/test_sqlite_client.py::TestApiRead::test_missing_handle_raises",
+          "state": "passed"
+        },
+        {
+          "name": "test_list_people",
+          "fullName": "tests/test_sqlite_client.py::TestApiRead::test_list_people",
+          "state": "passed"
+        },
+        {
+          "name": "test_filter_by_gramps_id",
+          "fullName": "tests/test_sqlite_client.py::TestApiRead::test_filter_by_gramps_id",
+          "state": "passed"
+        },
+        {
+          "name": "test_name_search",
+          "fullName": "tests/test_sqlite_client.py::TestApiRead::test_name_search",
+          "state": "passed"
+        },
+        {
+          "name": "test_gql_filter",
+          "fullName": "tests/test_sqlite_client.py::TestApiRead::test_gql_filter",
+          "state": "passed"
+        },
+        {
+          "name": "test_tree_info",
+          "fullName": "tests/test_sqlite_client.py::TestApiRead::test_tree_info",
+          "state": "passed"
+        },
+        {
+          "name": "test_with_headers",
+          "fullName": "tests/test_sqlite_client.py::TestApiRead::test_with_headers",
+          "state": "passed"
+        },
+        {
+          "name": "test_create_person",
+          "fullName": "tests/test_sqlite_client.py::TestApiWrite::test_create_person",
+          "state": "passed"
+        },
+        {
+          "name": "test_update_person_gender",
+          "fullName": "tests/test_sqlite_client.py::TestApiWrite::test_update_person_gender",
+          "state": "passed"
+        },
+        {
+          "name": "test_create_event",
+          "fullName": "tests/test_sqlite_client.py::TestApiWrite::test_create_event",
+          "state": "passed"
+        },
+        {
+          "name": "test_create_note",
+          "fullName": "tests/test_sqlite_client.py::TestApiWrite::test_create_note",
+          "state": "passed"
+        },
+        {
+          "name": "test_new_handle_is_unique",
+          "fullName": "tests/test_sqlite_client.py::TestApiWrite::test_new_handle_is_unique",
+          "state": "passed"
+        },
+        {
+          "name": "test_gramps_id_increments",
+          "fullName": "tests/test_sqlite_client.py::TestApiWrite::test_gramps_id_increments",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_timeline_is_list",
+          "fullName": "tests/test_sqlite_client.py::TestTimeline::test_person_timeline_is_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_timeline_has_birth",
+          "fullName": "tests/test_sqlite_client.py::TestTimeline::test_person_timeline_has_birth",
+          "state": "passed"
+        },
+        {
+          "name": "test_person_timeline_includes_marriage",
+          "fullName": "tests/test_sqlite_client.py::TestTimeline::test_person_timeline_includes_marriage",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_timeline",
+          "fullName": "tests/test_sqlite_client.py::TestTimeline::test_family_timeline",
+          "state": "passed"
+        },
+        {
+          "name": "test_read_only_flag_stored",
+          "fullName": "tests/test_sqlite_client.py::TestReadOnlyMode::test_read_only_flag_stored",
+          "state": "passed"
+        },
+        {
+          "name": "test_put_raises_when_read_only",
+          "fullName": "tests/test_sqlite_client.py::TestReadOnlyMode::test_put_raises_when_read_only",
+          "state": "passed"
+        },
+        {
+          "name": "test_sqlite_path_detected",
+          "fullName": "tests/test_sqlite_client.py::TestClientFactory::test_sqlite_path_detected",
+          "state": "passed"
+        },
+        {
+          "name": "test_gpkg_not_sqlite",
+          "fullName": "tests/test_sqlite_client.py::TestClientFactory::test_gpkg_not_sqlite",
+          "state": "passed"
+        },
+        {
+          "name": "test_directory_with_sqlite_db",
+          "fullName": "tests/test_sqlite_client.py::TestClientFactory::test_directory_with_sqlite_db",
+          "state": "passed"
+        },
+        {
+          "name": "test_gramps_file_not_sqlite",
+          "fullName": "tests/test_sqlite_client.py::TestClientFactory::test_gramps_file_not_sqlite",
+          "state": "passed"
+        }
+      ]
+    },
+    {
+      "moduleId": "tests/test_sqlite_integration.py",
+      "tests": [
+        {
+          "name": "test_loads_without_error",
+          "fullName": "tests/test_sqlite_integration.py::TestLoader::test_loads_without_error",
+          "state": "passed"
+        },
+        {
+          "name": "test_has_people",
+          "fullName": "tests/test_sqlite_integration.py::TestLoader::test_has_people",
+          "state": "passed"
+        },
+        {
+          "name": "test_has_families",
+          "fullName": "tests/test_sqlite_integration.py::TestLoader::test_has_families",
+          "state": "passed"
+        },
+        {
+          "name": "test_has_events",
+          "fullName": "tests/test_sqlite_integration.py::TestLoader::test_has_events",
+          "state": "passed"
+        },
+        {
+          "name": "test_counts_logged",
+          "fullName": "tests/test_sqlite_integration.py::TestLoader::test_counts_logged",
+          "state": "passed"
+        },
+        {
+          "name": "test_all_persons_have_handle",
+          "fullName": "tests/test_sqlite_integration.py::TestPersonInvariants::test_all_persons_have_handle",
+          "state": "passed"
+        },
+        {
+          "name": "test_all_persons_have_gramps_id",
+          "fullName": "tests/test_sqlite_integration.py::TestPersonInvariants::test_all_persons_have_gramps_id",
+          "state": "passed"
+        },
+        {
+          "name": "test_all_persons_have_primary_name",
+          "fullName": "tests/test_sqlite_integration.py::TestPersonInvariants::test_all_persons_have_primary_name",
+          "state": "passed"
+        },
+        {
+          "name": "test_first_name_is_string",
+          "fullName": "tests/test_sqlite_integration.py::TestPersonInvariants::test_first_name_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_surname_list_is_list",
+          "fullName": "tests/test_sqlite_integration.py::TestPersonInvariants::test_surname_list_is_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_surname_list_entries_have_surname_key",
+          "fullName": "tests/test_sqlite_integration.py::TestPersonInvariants::test_surname_list_entries_have_surname_key",
+          "state": "passed"
+        },
+        {
+          "name": "test_gender_is_int",
+          "fullName": "tests/test_sqlite_integration.py::TestPersonInvariants::test_gender_is_int",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_ref_list_is_list",
+          "fullName": "tests/test_sqlite_integration.py::TestPersonInvariants::test_event_ref_list_is_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_ref_role_is_string",
+          "fullName": "tests/test_sqlite_integration.py::TestPersonInvariants::test_event_ref_role_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_no_class_keys_in_person",
+          "fullName": "tests/test_sqlite_integration.py::TestPersonInvariants::test_no_class_keys_in_person",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_list_contains_strings",
+          "fullName": "tests/test_sqlite_integration.py::TestPersonInvariants::test_family_list_contains_strings",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_type_is_string",
+          "fullName": "tests/test_sqlite_integration.py::TestEventInvariants::test_event_type_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_type_not_empty",
+          "fullName": "tests/test_sqlite_integration.py::TestEventInvariants::test_event_type_not_empty",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_date_has_string_key",
+          "fullName": "tests/test_sqlite_integration.py::TestEventInvariants::test_event_date_has_string_key",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_date_dateval_is_list",
+          "fullName": "tests/test_sqlite_integration.py::TestEventInvariants::test_event_date_dateval_is_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_has_relationship_key",
+          "fullName": "tests/test_sqlite_integration.py::TestFamilyInvariants::test_family_has_relationship_key",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_has_no_type_key",
+          "fullName": "tests/test_sqlite_integration.py::TestFamilyInvariants::test_family_has_no_type_key",
+          "state": "passed"
+        },
+        {
+          "name": "test_relationship_is_string",
+          "fullName": "tests/test_sqlite_integration.py::TestFamilyInvariants::test_relationship_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_child_ref_frel_is_string",
+          "fullName": "tests/test_sqlite_integration.py::TestFamilyInvariants::test_child_ref_frel_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_place_type_is_string",
+          "fullName": "tests/test_sqlite_integration.py::TestPlaceInvariants::test_place_type_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_event_refs_resolve",
+          "fullName": "tests/test_sqlite_integration.py::TestCrossReferences::test_event_refs_resolve",
+          "state": "passed"
+        },
+        {
+          "name": "test_family_refs_resolve",
+          "fullName": "tests/test_sqlite_integration.py::TestCrossReferences::test_family_refs_resolve",
+          "state": "passed"
+        },
+        {
+          "name": "test_birth_ref_index_in_range",
+          "fullName": "tests/test_sqlite_integration.py::TestCrossReferences::test_birth_ref_index_in_range",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_person_runs",
+          "fullName": "tests/test_sqlite_integration.py::TestHandlerSmoke::test_format_person_runs",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_family_runs",
+          "fullName": "tests/test_sqlite_integration.py::TestHandlerSmoke::test_format_family_runs",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_note_handler",
+          "fullName": "tests/test_sqlite_integration.py::TestHandlerSmoke::test_format_note_handler",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_place_inline",
+          "fullName": "tests/test_sqlite_integration.py::TestHandlerSmoke::test_format_place_inline",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_source_runs",
+          "fullName": "tests/test_sqlite_integration.py::TestHandlerSmoke::test_format_source_runs",
+          "state": "passed"
+        },
+        {
+          "name": "test_format_citation_runs",
+          "fullName": "tests/test_sqlite_integration.py::TestHandlerSmoke::test_format_citation_runs",
+          "state": "passed"
+        },
+        {
+          "name": "test_source_title_is_string",
+          "fullName": "tests/test_sqlite_integration.py::TestSourceInvariants::test_source_title_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_source_note_list_is_list",
+          "fullName": "tests/test_sqlite_integration.py::TestSourceInvariants::test_source_note_list_is_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_source_reporef_list_is_list",
+          "fullName": "tests/test_sqlite_integration.py::TestSourceInvariants::test_source_reporef_list_is_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_source_reporef_has_ref_key",
+          "fullName": "tests/test_sqlite_integration.py::TestSourceInvariants::test_source_reporef_has_ref_key",
+          "state": "passed"
+        },
+        {
+          "name": "test_source_media_list_is_list",
+          "fullName": "tests/test_sqlite_integration.py::TestSourceInvariants::test_source_media_list_is_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_source_no_class_keys",
+          "fullName": "tests/test_sqlite_integration.py::TestSourceInvariants::test_source_no_class_keys",
+          "state": "passed"
+        },
+        {
+          "name": "test_citation_page_is_string",
+          "fullName": "tests/test_sqlite_integration.py::TestCitationInvariants::test_citation_page_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_citation_confidence_is_int",
+          "fullName": "tests/test_sqlite_integration.py::TestCitationInvariants::test_citation_confidence_is_int",
+          "state": "passed"
+        },
+        {
+          "name": "test_citation_source_handle_resolves",
+          "fullName": "tests/test_sqlite_integration.py::TestCitationInvariants::test_citation_source_handle_resolves",
+          "state": "passed"
+        },
+        {
+          "name": "test_citation_date_normalised",
+          "fullName": "tests/test_sqlite_integration.py::TestCitationInvariants::test_citation_date_normalised",
+          "state": "passed"
+        },
+        {
+          "name": "test_repository_name_is_string",
+          "fullName": "tests/test_sqlite_integration.py::TestRepositoryInvariants::test_repository_name_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_repository_urls_is_list",
+          "fullName": "tests/test_sqlite_integration.py::TestRepositoryInvariants::test_repository_urls_is_list",
+          "state": "passed"
+        },
+        {
+          "name": "test_repository_no_class_keys",
+          "fullName": "tests/test_sqlite_integration.py::TestRepositoryInvariants::test_repository_no_class_keys",
+          "state": "passed"
+        },
+        {
+          "name": "test_media_path_is_string",
+          "fullName": "tests/test_sqlite_integration.py::TestMediaInvariants::test_media_path_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_media_mime_is_string",
+          "fullName": "tests/test_sqlite_integration.py::TestMediaInvariants::test_media_mime_is_string",
+          "state": "passed"
+        },
+        {
+          "name": "test_media_date_normalised",
+          "fullName": "tests/test_sqlite_integration.py::TestMediaInvariants::test_media_date_normalised",
+          "state": "passed"
+        },
+        {
+          "name": "test_note_text_has_string_key",
+          "fullName": "tests/test_sqlite_integration.py::TestNoteInvariants::test_note_text_has_string_key",
+          "state": "passed"
+        },
+        {
+          "name": "test_note_no_class_keys",
+          "fullName": "tests/test_sqlite_integration.py::TestNoteInvariants::test_note_no_class_keys",
+          "state": "passed"
+        },
+        {
+          "name": "test_daterange_normalised",
+          "fullName": "tests/test_sqlite_integration.py::TestDateVariety::test_daterange_normalised",
+          "state": "passed"
+        },
+        {
+          "name": "test_datespan_normalised",
+          "fullName": "tests/test_sqlite_integration.py::TestDateVariety::test_datespan_normalised",
+          "state": "passed"
+        },
+        {
+          "name": "test_datestr_normalised",
+          "fullName": "tests/test_sqlite_integration.py::TestDateVariety::test_datestr_normalised",
+          "state": "passed"
+        },
+        {
+          "name": "test_no_raw_text_key_anywhere",
+          "fullName": "tests/test_sqlite_integration.py::TestDateVariety::test_no_raw_text_key_anywhere",
+          "state": "passed"
+        },
+        {
+          "name": "test_create_person_persists_to_disk",
+          "fullName": "tests/test_sqlite_integration.py::TestWriteRoundtrip::test_create_person_persists_to_disk",
+          "state": "passed"
+        },
+        {
+          "name": "test_update_person_persists_to_disk",
+          "fullName": "tests/test_sqlite_integration.py::TestWriteRoundtrip::test_update_person_persists_to_disk",
+          "state": "passed"
+        },
+        {
+          "name": "test_create_event_with_type_persists",
+          "fullName": "tests/test_sqlite_integration.py::TestWriteRoundtrip::test_create_event_with_type_persists",
+          "state": "passed"
+        }
+      ]
+    }
+  ]
+}

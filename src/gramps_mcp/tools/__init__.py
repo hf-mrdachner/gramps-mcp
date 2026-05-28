@@ -48,7 +48,6 @@ from .database import (
     close_database_tool,
     list_databases_tool,
     open_database_tool,
-    reload_database_tool,
 )
 from .search_basic import (
     find_anything_tool,
@@ -99,5 +98,4 @@ __all__ = [
     "list_databases_tool",
     "open_database_tool",
     "close_database_tool",
-    "reload_database_tool",
 ]

@@ -34,7 +34,6 @@ from ..client import (
     close_database,
     list_databases,
     open_database,
-    reload_database,
 )
 
 logger = logging.getLogger(__name__)
@@ -162,35 +161,3 @@ async def close_database_tool(arguments: Dict) -> List[TextContent]:
     else:
         msg = "No database was open."
     return [TextContent(type="text", text=msg)]
-
-
-async def reload_database_tool(arguments: Dict) -> List[TextContent]:
-    """
-    Close and reopen the current database (lock management).
-
-    Because reads are lazy (always live from SQLite), this is not needed
-    to pick up external changes — those are visible immediately.  The
-    main use case is lock cycling: release the agent lock so Gramps
-    Desktop can open the database, then call this to re-acquire the lock
-    (or switch to read-only if Gramps Desktop is still holding it).
-
-    Args:
-        arguments: Not used.
-
-    Returns:
-        Confirmation message with current record counts and lock state.
-    """
-    try:
-        client, _ = reload_database()
-        is_sqlite = hasattr(client._db, "_conn")
-        mode = "read/write (SQLite)" if is_sqlite else "read-only (XML)"
-        msg = (
-            f"Database reloaded in {mode} mode.\n\n"
-            f"Record counts:\n{_db_summary(client)}"
-        )
-        return [TextContent(type="text", text=msg)]
-    except GrampsAPIError as exc:
-        return [TextContent(type="text", text=f"Error: {exc}")]
-    except Exception as exc:
-        logger.exception("reload_database_tool failed")
-        return [TextContent(type="text", text=f"Unexpected error: {exc}")]

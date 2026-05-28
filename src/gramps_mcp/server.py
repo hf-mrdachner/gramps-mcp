@@ -69,7 +69,6 @@ from .tools import (
     get_tree_info_tool,
     list_databases_tool,
     open_database_tool,
-    reload_database_tool,
 )
 from .tools.search_basic import find_type_tool
 from .tools.search_details import get_type_tool
@@ -250,23 +249,12 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
     "close_database": {
         "description": (
-            "Close the current database connection and release all file locks. "
-            "Call this before opening the database in Gramps Desktop "
-            "to avoid conflicts. Use reload_database to reconnect afterwards."
+            "Close the current database connection and release the lock file. "
+            "Call this before opening the database in Gramps Desktop to avoid "
+            "conflicts. Call open_database again when you want to reconnect."
         ),
         "schema": EmptyParams,
         "handler": close_database_tool,
-    },
-    "reload_database": {
-        "description": (
-            "Close and reopen the current database. "
-            "Data is always fresh (lazy SQLite reads) so this is mainly "
-            "useful for lock management: release the agent lock so Gramps "
-            "Desktop can open the database, then call reload_database to "
-            "re-acquire the lock (or switch to read-only if Desktop is still open)."
-        ),
-        "schema": EmptyParams,
-        "handler": reload_database_tool,
     },
 }
 

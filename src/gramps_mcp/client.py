@@ -345,8 +345,7 @@ class GrampsWebAPIClient:
 # Export the main classes for easy import
 __all__ = [
     "GrampsWebAPIClient", "GrampsAPIError",
-    "get_client", "open_database", "close_database", "reload_database",
-    "list_databases",
+    "get_client", "open_database", "close_database", "list_databases",
 ]
 
 
@@ -625,31 +624,3 @@ def close_database() -> str:
     return path
 
 
-def reload_database():
-    """
-    Close and immediately reopen the current database.
-
-    Because the SQLite backend uses lazy loading, all reads already
-    reflect the latest database state — there is no stale in-memory
-    cache to flush.  The main purpose of this call is **lock
-    management**: release the agent's lock file so Gramps Desktop can
-    work, then re-acquire it (or open read-only if Gramps Desktop
-    still has the file open).
-
-    Equivalent to ``close_database()`` followed by
-    ``open_database(same_path)``.
-
-    Returns:
-        Tuple ``(client, locked_by)`` — same as :func:`open_database`.
-
-    Raises:
-        GrampsAPIError: If no database is currently open.
-    """
-    path = _direct_client_path
-    if not path:
-        raise GrampsAPIError(
-            "No database currently open. Use open_database first."
-        )
-    _clear_lock(path)
-    _close_singleton()
-    return open_database(path)

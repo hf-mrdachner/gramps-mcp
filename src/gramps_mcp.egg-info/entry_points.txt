@@ -1,0 +1,2 @@
+[console_scripts]
+gramps-mcp = gramps_mcp.server:main
