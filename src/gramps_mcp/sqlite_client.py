@@ -84,17 +84,19 @@ class GrampsSqliteClient:
     as GrampsWebAPIClient and GrampsDirectClient.
     """
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, read_only: bool = False):
         """
         Open the Gramps SQLite database and load all objects into memory.
 
         Args:
-            db_path: Absolute path to the Gramps ``sqlite.db`` file, or to
+            db_path:   Absolute path to the Gramps ``sqlite.db`` file, or to
                 the grampsdb tree directory (which contains ``sqlite.db``).
+            read_only: If True, write operations raise :class:`GrampsAPIError`.
+                Set automatically when another process holds the lock file.
         """
         if os.path.isdir(db_path):
             db_path = os.path.join(db_path, "sqlite.db")
-        self._db: GrampsSqliteDB = _load_sqlite(db_path)
+        self._db: GrampsSqliteDB = _load_sqlite(db_path, read_only=read_only)
         self._db_path = db_path
         self._report_cache: Dict[str, str] = {}
 

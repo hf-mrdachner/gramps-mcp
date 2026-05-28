@@ -410,6 +410,38 @@ class TestTimeline:
 # ===========================================================================
 
 
+class TestReadOnlyMode:
+    def test_read_only_flag_stored(self, sqlite_db):
+        from gramps_mcp._gramps_sqlite import GrampsSqliteDB
+        assert hasattr(sqlite_db, "_read_only")
+
+    @pytest.mark.asyncio
+    async def test_put_raises_when_read_only(self, tmp_path):
+        """Writing to a read-only DB raises GrampsAPIError."""
+        import sqlite3
+        from gramps_mcp._gramps_sqlite import _load_sqlite
+        # Create a minimal empty SQLite file
+        db_path = tmp_path / "ro_test.sqlite"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE person (handle TEXT PRIMARY KEY, gramps_id TEXT, "
+            "json_data TEXT, given_name TEXT, surname TEXT, gender INTEGER, "
+            "birth_ref_index INTEGER DEFAULT -1, death_ref_index INTEGER DEFAULT -1, "
+            "change INTEGER DEFAULT 0, private INTEGER DEFAULT 0)"
+        )
+        conn.commit()
+        conn.close()
+
+        db = _load_sqlite(str(db_path), read_only=True)
+        with pytest.raises(GrampsAPIError, match="read-only"):
+            db.put("person", {"gender": 1, "primary_name": {
+                "first_name": "Test",
+                "surname_list": [{"surname": "X", "primary": True,
+                                   "prefix": "", "connector": ""}],
+            }})
+        db.close()
+
+
 class TestClientFactory:
     def test_sqlite_path_detected(self, tmp_path):
         from gramps_mcp.client import _is_sqlite_path

@@ -393,13 +393,19 @@ def get_client():
             if _is_sqlite_path(path):
                 from .sqlite_client import GrampsSqliteClient
                 locked_by = _read_lock(path)
-                if locked_by and "gramps_mcp" not in locked_by:
+                externally_locked = bool(
+                    locked_by and "gramps_mcp" not in locked_by
+                )
+                if externally_locked:
                     logger.warning(
-                        "Database '%s' locked by '%s' (Gramps Desktop open?)",
+                        "Database '%s' locked by '%s' — opening read-only.",
                         path, locked_by,
                     )
-                _direct_client_singleton = GrampsSqliteClient(path)
-                _write_lock(path)
+                _direct_client_singleton = GrampsSqliteClient(
+                    path, read_only=externally_locked
+                )
+                if not externally_locked:
+                    _write_lock(path)
             else:
                 from .direct_client import GrampsDirectClient
                 _direct_client_singleton = GrampsDirectClient(path)
@@ -578,17 +584,20 @@ def open_database(path: str):
     _close_singleton()
 
     locked_by = _read_lock(path)
-    if locked_by and "gramps_mcp" not in locked_by:
-        logger.warning(
-            "Database '%s' appears to be open in Gramps Desktop (%s). "
-            "Concurrent writes may conflict.",
-            path, locked_by,
-        )
+    externally_locked = bool(locked_by and "gramps_mcp" not in locked_by)
 
     if _is_sqlite_path(path):
         from .sqlite_client import GrampsSqliteClient
-        _direct_client_singleton = GrampsSqliteClient(path)
-        _write_lock(path)
+        if externally_locked:
+            logger.warning(
+                "Database '%s' locked by '%s' — opening read-only.",
+                path, locked_by,
+            )
+        _direct_client_singleton = GrampsSqliteClient(
+            path, read_only=externally_locked
+        )
+        if not externally_locked:
+            _write_lock(path)
     else:
         from .direct_client import GrampsDirectClient
         _direct_client_singleton = GrampsDirectClient(path)

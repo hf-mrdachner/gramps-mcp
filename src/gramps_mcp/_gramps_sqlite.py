@@ -258,15 +258,17 @@ def _denorm_date(d: Any) -> Dict:
 # ---------------------------------------------------------------------------
 
 
-def _load_sqlite(db_path: str) -> "GrampsSqliteDB":
+def _load_sqlite(db_path: str, read_only: bool = False) -> "GrampsSqliteDB":
     """
     Open a Gramps SQLite database and load all objects into memory.
 
     Args:
-        db_path: Absolute path to the Gramps ``sqlite.db`` file.
+        db_path:   Absolute path to the Gramps ``sqlite.db`` file.
+        read_only: If True, open in read-only mode (``PRAGMA query_only``).
+                   Write attempts will raise :class:`GrampsAPIError`.
 
     Returns:
-        A :class:`GrampsSqliteDB` instance ready for reads and writes.
+        A :class:`GrampsSqliteDB` instance.
 
     Raises:
         GrampsAPIError: If the file cannot be opened or is not a Gramps DB.
@@ -274,15 +276,24 @@ def _load_sqlite(db_path: str) -> "GrampsSqliteDB":
     try:
         conn = sqlite3.connect(db_path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
+        if read_only:
+            conn.execute("PRAGMA query_only=ON")
+        else:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
     except Exception as exc:
         raise GrampsAPIError(
             f"Cannot open Gramps SQLite DB '{db_path}': {exc}"
         ) from exc
 
     def _load(table: str, normalise) -> Dict[str, Dict]:
-        rows = conn.execute(f"SELECT handle, json_data FROM {table}").fetchall()  # noqa: S608
+        try:
+            rows = conn.execute(  # noqa: S608
+                f"SELECT handle, json_data FROM {table}"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            logger.debug("Table '%s' not found in database — skipping.", table)
+            return {}
         result = {}
         for row in rows:
             try:
@@ -311,6 +322,7 @@ def _load_sqlite(db_path: str) -> "GrampsSqliteDB":
     return GrampsSqliteDB(
         conn=conn, db_path=db_path,
         source_name=db_path,
+        read_only=read_only,
         people=people, families=families, events=events,
         places=places, sources=sources, citations=citations,
         notes=notes, media=media, repositories=repositories,
@@ -330,18 +342,26 @@ class GrampsSqliteDB(GrampsXmlDB):
     Adds :meth:`put` for transactional write-through to SQLite.
     """
 
-    def __init__(self, conn: sqlite3.Connection, db_path: str, **kwargs):
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        db_path: str,
+        read_only: bool = False,
+        **kwargs,
+    ):
         """
         Initialise with an open SQLite connection and all object dicts.
 
         Args:
-            conn:    Open ``sqlite3.Connection`` to the Gramps database.
-            db_path: Path to the SQLite file (used for logging).
-            **kwargs: All keyword args forwarded to :class:`GrampsXmlDB`.
+            conn:      Open ``sqlite3.Connection`` to the Gramps database.
+            db_path:   Path to the SQLite file (used for logging).
+            read_only: If True, :meth:`put` raises :class:`GrampsAPIError`.
+            **kwargs:  All keyword args forwarded to :class:`GrampsXmlDB`.
         """
         super().__init__(**kwargs)
         self._conn = conn
         self._db_path = db_path
+        self._read_only = read_only
 
     # ------------------------------------------------------------------
     # Handle / ID generation
@@ -400,8 +420,14 @@ class GrampsSqliteDB(GrampsXmlDB):
             The stored dict (with handle and gramps_id filled in).
 
         Raises:
-            GrampsAPIError: On database errors.
+            GrampsAPIError: If the database is read-only or on write errors.
         """
+        if self._read_only:
+            raise GrampsAPIError(
+                "Cannot write: database is open in read-only mode because "
+                "another process (Gramps Desktop?) holds the lock file. "
+                "Close Gramps Desktop first, then call reload_database."
+            )
         handle = obj.get("handle") or self.new_handle()
         obj = {**obj, "handle": handle}
 

@@ -125,9 +125,9 @@ async def open_database_tool(arguments: Dict) -> List[TextContent]:
         ]
         if locked_by and "gramps_mcp" not in locked_by:
             lines.append(
-                f"\n⚠️  Warning: this database also appears to be open in "
-                f"Gramps Desktop ({locked_by}). "
-                "Concurrent writes may conflict."
+                f"\n⚠️  Database locked by {locked_by} (Gramps Desktop open?).\n"
+                "Opened in READ-ONLY mode — writes are disabled.\n"
+                "Close Gramps Desktop and call reload_database to enable writes."
             )
         lines.append(f"\nRecord counts:\n{_db_summary(client)}")
         return [TextContent(type="text", text="\n".join(lines))]
