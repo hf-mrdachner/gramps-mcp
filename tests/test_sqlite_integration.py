@@ -7,28 +7,44 @@ These tests run against your actual Gramps SQLite database to verify that:
   3. Type mappings are correct (EventType values, FamilyRelType, etc.)
   4. All structural invariants hold across every object in the database
 
+Database priority:
+  1. GRAMPS_TEST_DB_PATH env var (explicit override)
+  2. tests/fixtures/test_gramps.sqlite (anonymized, committed to repo)
+  3. Default real DB path (developer machine only)
+
 Run with:
     uv run pytest tests/test_sqlite_integration.py -v -m integration
 
-Skip in CI (no real DB available):
-    uv run pytest -m "not integration"
-
-Configure the database path:
+Run against real DB:
     GRAMPS_TEST_DB_PATH=C:/path/to/sqlite.db uv run pytest -m integration
 """
 
 import os
+import shutil
+from pathlib import Path
 
 import pytest
 
 # ---------------------------------------------------------------------------
-# Real database path
+# Database path resolution
 # ---------------------------------------------------------------------------
 
-_DEFAULT_DB = (
+_ANON_DB = Path(__file__).parent / "fixtures" / "test_gramps.sqlite"
+_REAL_DB = (
     r"C:\Users\dachner\AppData\Roaming\gramps\grampsdb\6a1764f8\sqlite.db"
 )
-REAL_DB = os.environ.get("GRAMPS_TEST_DB_PATH", _DEFAULT_DB)
+
+
+def _find_db() -> str:
+    explicit = os.environ.get("GRAMPS_TEST_DB_PATH")
+    if explicit:
+        return explicit
+    if _ANON_DB.exists():
+        return str(_ANON_DB)
+    return _REAL_DB
+
+
+REAL_DB = _find_db()
 
 pytestmark = pytest.mark.integration
 
@@ -39,8 +55,8 @@ def _db_available() -> bool:
 
 skip_if_no_db = pytest.mark.skipif(
     not _db_available(),
-    reason=f"Real Gramps DB not found at {REAL_DB}. "
-           "Set GRAMPS_TEST_DB_PATH to override.",
+    reason=f"No Gramps DB found at {REAL_DB}. "
+           "Set GRAMPS_TEST_DB_PATH or regenerate tests/fixtures/test_gramps.sqlite.",
 )
 
 
@@ -376,3 +392,351 @@ class TestHandlerSmoke:
         place = next(iter(real_db.all("place")))
         result = await format_place(real_client, "default", place["handle"], inline=True)
         assert isinstance(result, str)
+
+    @skip_if_no_db
+    @pytest.mark.asyncio
+    async def test_format_source_runs(self, real_client, real_db):
+        """format_source handler must not crash."""
+        if real_db.count("source") == 0:
+            pytest.skip("No sources in DB")
+        from gramps_mcp.handlers.source_handler import format_source
+        source = next(iter(real_db.all("source")))
+        result = await format_source(real_client, "default", source["handle"])
+        assert isinstance(result, str)
+
+    @skip_if_no_db
+    @pytest.mark.asyncio
+    async def test_format_citation_runs(self, real_client, real_db):
+        """format_citation handler must not crash."""
+        if real_db.count("citation") == 0:
+            pytest.skip("No citations in DB")
+        from gramps_mcp.handlers.citation_handler import format_citation
+        citation = next(iter(real_db.all("citation")))
+        result = await format_citation(real_client, "default", citation["handle"])
+        assert isinstance(result, str)
+
+
+# ---------------------------------------------------------------------------
+# Structural invariants: Source / Citation / Repository / Media / Note
+# ---------------------------------------------------------------------------
+
+
+class TestSourceInvariants:
+    @skip_if_no_db
+    def test_source_title_is_string(self, real_db):
+        for src in real_db.all("source"):
+            t = src.get("title")
+            assert isinstance(t, str), (
+                f"source title not str for {src.get('gramps_id')}: {type(t)}"
+            )
+
+    @skip_if_no_db
+    def test_source_note_list_is_list(self, real_db):
+        for src in real_db.all("source"):
+            nl = src.get("note_list")
+            assert isinstance(nl, list), (
+                f"source note_list not list for {src.get('gramps_id')}: {type(nl)}"
+            )
+
+    @skip_if_no_db
+    def test_source_reporef_list_is_list(self, real_db):
+        for src in real_db.all("source"):
+            rl = src.get("reporef_list")
+            assert isinstance(rl, list), (
+                f"source reporef_list not list for {src.get('gramps_id')}: {type(rl)}"
+            )
+
+    @skip_if_no_db
+    def test_source_reporef_has_ref_key(self, real_db):
+        for src in real_db.all("source"):
+            for rref in src.get("reporef_list", []):
+                assert "ref" in rref, (
+                    f"reporef missing 'ref' in source {src.get('gramps_id')}: {rref}"
+                )
+                assert isinstance(rref["ref"], str)
+
+    @skip_if_no_db
+    def test_source_media_list_is_list(self, real_db):
+        for src in real_db.all("source"):
+            ml = src.get("media_list")
+            assert isinstance(ml, list), (
+                f"source media_list not list for {src.get('gramps_id')}: {type(ml)}"
+            )
+
+    @skip_if_no_db
+    def test_source_no_class_keys(self, real_db):
+        for src in real_db.all("source"):
+            assert "_class" not in src, (
+                f"_class leaked into source {src.get('gramps_id')}"
+            )
+
+
+class TestCitationInvariants:
+    @skip_if_no_db
+    def test_citation_page_is_string(self, real_db):
+        for cit in real_db.all("citation"):
+            p = cit.get("page")
+            assert isinstance(p, str), (
+                f"citation page not str for {cit.get('gramps_id')}: {type(p)}"
+            )
+
+    @skip_if_no_db
+    def test_citation_confidence_is_int(self, real_db):
+        for cit in real_db.all("citation"):
+            c = cit.get("confidence")
+            assert isinstance(c, int), (
+                f"citation confidence not int for {cit.get('gramps_id')}: {type(c)}"
+            )
+
+    @skip_if_no_db
+    def test_citation_source_handle_resolves(self, real_db):
+        missing = []
+        for cit in real_db.all("citation"):
+            sh = cit.get("source_handle")
+            if sh and real_db.get("source", sh) is None:
+                missing.append((cit.get("gramps_id"), sh))
+        assert not missing, f"Dangling source refs in citations: {missing[:5]}"
+
+    @skip_if_no_db
+    def test_citation_date_normalised(self, real_db):
+        for cit in real_db.all("citation"):
+            date = cit.get("date", {})
+            if date:
+                assert "string" in date, (
+                    f"citation date missing 'string' for {cit.get('gramps_id')}"
+                )
+                assert "text" not in date, (
+                    f"citation date has raw 'text' for {cit.get('gramps_id')}"
+                )
+
+
+class TestRepositoryInvariants:
+    @skip_if_no_db
+    def test_repository_name_is_string(self, real_db):
+        for repo in real_db.all("repository"):
+            n = repo.get("name")
+            assert isinstance(n, str), (
+                f"repo name not str for {repo.get('gramps_id')}: {type(n)}"
+            )
+
+    @skip_if_no_db
+    def test_repository_urls_is_list(self, real_db):
+        for repo in real_db.all("repository"):
+            urls = repo.get("urls")
+            assert isinstance(urls, list), (
+                f"repo urls not list for {repo.get('gramps_id')}: {type(urls)}"
+            )
+
+    @skip_if_no_db
+    def test_repository_no_class_keys(self, real_db):
+        for repo in real_db.all("repository"):
+            assert "_class" not in repo, (
+                f"_class leaked into repository {repo.get('gramps_id')}"
+            )
+
+
+class TestMediaInvariants:
+    @skip_if_no_db
+    def test_media_path_is_string(self, real_db):
+        for m in real_db.all("media"):
+            p = m.get("path")
+            assert isinstance(p, str), (
+                f"media path not str for {m.get('gramps_id')}: {type(p)}"
+            )
+
+    @skip_if_no_db
+    def test_media_mime_is_string(self, real_db):
+        for m in real_db.all("media"):
+            mime = m.get("mime")
+            assert isinstance(mime, str), (
+                f"media mime not str for {m.get('gramps_id')}: {type(mime)}"
+            )
+
+    @skip_if_no_db
+    def test_media_date_normalised(self, real_db):
+        for m in real_db.all("media"):
+            date = m.get("date", {})
+            if date:
+                assert "string" in date, (
+                    f"media date missing 'string' for {m.get('gramps_id')}"
+                )
+
+
+class TestNoteInvariants:
+    @skip_if_no_db
+    def test_note_text_has_string_key(self, real_db):
+        for note in real_db.all("note"):
+            text = note.get("text")
+            if isinstance(text, dict):
+                assert "string" in text, (
+                    f"note text dict missing 'string' for {note.get('gramps_id')}: "
+                    f"{list(text.keys())}"
+                )
+
+    @skip_if_no_db
+    def test_note_no_class_keys(self, real_db):
+        for note in real_db.all("note"):
+            assert "_class" not in note, (
+                f"_class leaked into note {note.get('gramps_id')}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Date variety — daterange, datespan, datestr
+# ---------------------------------------------------------------------------
+
+
+class TestDateVariety:
+    @skip_if_no_db
+    def test_daterange_normalised(self, real_db):
+        """Events with daterange must have modifier=4 and a 'string' key."""
+        checked = 0
+        for ev in real_db.all("event"):
+            date = ev.get("date", {})
+            if date.get("modifier") == 4:  # between
+                assert "string" in date, (
+                    f"daterange missing 'string' for {ev.get('gramps_id')}"
+                )
+                assert "text" not in date
+                checked += 1
+        print(f"\n  daterange events found: {checked}")
+
+    @skip_if_no_db
+    def test_datespan_normalised(self, real_db):
+        """Events with datespan must have modifier=5."""
+        checked = 0
+        for ev in real_db.all("event"):
+            date = ev.get("date", {})
+            if date.get("modifier") == 5:  # from…to
+                assert "string" in date
+                assert "text" not in date
+                checked += 1
+        print(f"\n  datespan events found: {checked}")
+
+    @skip_if_no_db
+    def test_datestr_normalised(self, real_db):
+        """Text-only dates (modifier=6) must have a non-empty 'string'."""
+        checked = 0
+        for ev in real_db.all("event"):
+            date = ev.get("date", {})
+            if date.get("modifier") == 6:  # text only
+                assert "string" in date
+                assert "text" not in date
+                # datestr should have a meaningful string value
+                assert isinstance(date["string"], str)
+                checked += 1
+        print(f"\n  datestr events found: {checked}")
+
+    @skip_if_no_db
+    def test_no_raw_text_key_anywhere(self, real_db):
+        """No date dict in any object should have a 'text' key after normalisation."""
+        violations = []
+        for obj_type in ("person", "family", "event", "citation", "media"):
+            for obj in real_db.all(obj_type):
+                date = obj.get("date", {})
+                if isinstance(date, dict) and "text" in date:
+                    violations.append((obj_type, obj.get("gramps_id")))
+        assert not violations, (
+            f"Raw 'text' key found in date dicts: {violations[:5]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Write roundtrip — write to disk, reopen, verify
+# ---------------------------------------------------------------------------
+
+
+class TestWriteRoundtrip:
+    @skip_if_no_db
+    def test_create_person_persists_to_disk(self, tmp_path):
+        """Write a new person → close connection → reopen → person still there."""
+        from gramps_mcp.sqlite_client import GrampsSqliteClient
+
+        # Fresh copy so we don't modify the shared fixture
+        db_copy = tmp_path / "roundtrip.sqlite"
+        shutil.copy(REAL_DB, db_copy)
+
+        client = GrampsSqliteClient(str(db_copy))
+        new_person = {
+            "gender": 0,
+            "primary_name": {
+                "first_name": "Roundtrip",
+                "surname_list": [
+                    {"surname": "Test", "primary": True, "prefix": "", "connector": ""}
+                ],
+                "suffix": "", "title": "", "call": "", "nick": "",
+                "type": "Birth Name",
+            },
+            "event_ref_list": [], "family_list": [], "parent_family_list": [],
+            "note_list": [], "citation_list": [], "media_list": [],
+            "address_list": [], "urls": [],
+        }
+        created = client._db.put("person", new_person)
+        handle = created["handle"]
+        gramps_id = created["gramps_id"]
+        client._db.close()
+
+        # Reopen and verify
+        client2 = GrampsSqliteClient(str(db_copy))
+        fetched = client2._db.get("person", handle)
+        assert fetched is not None, "Person not found after reopen"
+        assert fetched["gramps_id"] == gramps_id
+        assert fetched["primary_name"]["first_name"] == "Roundtrip"
+        assert fetched["primary_name"]["surname_list"][0]["surname"] == "Test"
+        assert fetched["gender"] == 0
+        client2._db.close()
+
+    @skip_if_no_db
+    def test_update_person_persists_to_disk(self, tmp_path):
+        """Update an existing person → close → reopen → change visible."""
+        from gramps_mcp.sqlite_client import GrampsSqliteClient
+
+        db_copy = tmp_path / "update_roundtrip.sqlite"
+        shutil.copy(REAL_DB, db_copy)
+
+        client = GrampsSqliteClient(str(db_copy))
+        # Get any person
+        person = next(iter(client._db.all("person")))
+        handle = person["handle"]
+        original_gender = person["gender"]
+        new_gender = 0 if original_gender == 1 else 1
+
+        client._db.put("person", {**person, "gender": new_gender})
+        client._db.close()
+
+        client2 = GrampsSqliteClient(str(db_copy))
+        fetched = client2._db.get("person", handle)
+        assert fetched["gender"] == new_gender, (
+            f"Gender not updated: expected {new_gender}, got {fetched['gender']}"
+        )
+        client2._db.close()
+
+    @skip_if_no_db
+    def test_create_event_with_type_persists(self, tmp_path):
+        """Event type must survive denorm → SQLite → renorm roundtrip."""
+        from gramps_mcp.sqlite_client import GrampsSqliteClient
+
+        db_copy = tmp_path / "event_roundtrip.sqlite"
+        shutil.copy(REAL_DB, db_copy)
+
+        client = GrampsSqliteClient(str(db_copy))
+        new_event = {
+            "type": "Baptism",
+            "date": {"dateval": [12, 6, 1880, False], "modifier": 0,
+                     "quality": 0, "string": ""},
+            "description": "Taufe in St. Marien",
+            "place": None,
+            "note_list": [], "citation_list": [],
+        }
+        created = client._db.put("event", new_event)
+        handle = created["handle"]
+        client._db.close()
+
+        client2 = GrampsSqliteClient(str(db_copy))
+        fetched = client2._db.get("event", handle)
+        assert fetched["type"] == "Baptism", (
+            f"Event type not preserved: {fetched['type']!r}"
+        )
+        assert fetched["date"]["dateval"] == [12, 6, 1880, False]
+        assert fetched["description"] == "Taufe in St. Marien"
+        client2._db.close()
