@@ -166,16 +166,19 @@ async def close_database_tool(arguments: Dict) -> List[TextContent]:
 
 async def reload_database_tool(arguments: Dict) -> List[TextContent]:
     """
-    Close and immediately reopen the current database from disk.
+    Close and reopen the current database (lock management).
 
-    Use this after Gramps Desktop (or another tool) has written changes
-    so the agent sees the updated data.
+    Because reads are lazy (always live from SQLite), this is not needed
+    to pick up external changes — those are visible immediately.  The
+    main use case is lock cycling: release the agent lock so Gramps
+    Desktop can open the database, then call this to re-acquire the lock
+    (or switch to read-only if Gramps Desktop is still holding it).
 
     Args:
         arguments: Not used.
 
     Returns:
-        Confirmation message with refreshed record counts.
+        Confirmation message with current record counts and lock state.
     """
     try:
         client, _ = reload_database()

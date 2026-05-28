@@ -627,13 +627,20 @@ def close_database() -> str:
 
 def reload_database():
     """
-    Close and immediately reopen the current database from disk.
+    Close and immediately reopen the current database.
 
-    Use this after Gramps Desktop has made changes so the agent sees
-    the updated data.
+    Because the SQLite backend uses lazy loading, all reads already
+    reflect the latest database state — there is no stale in-memory
+    cache to flush.  The main purpose of this call is **lock
+    management**: release the agent's lock file so Gramps Desktop can
+    work, then re-acquire it (or open read-only if Gramps Desktop
+    still has the file open).
+
+    Equivalent to ``close_database()`` followed by
+    ``open_database(same_path)``.
 
     Returns:
-        The refreshed client instance.
+        Tuple ``(client, locked_by)`` — same as :func:`open_database`.
 
     Raises:
         GrampsAPIError: If no database is currently open.

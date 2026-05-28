@@ -259,9 +259,11 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
     "reload_database": {
         "description": (
-            "Reload the current database from disk. "
-            "Use this after Gramps Desktop (or another process) has written "
-            "changes so the agent sees the updated data."
+            "Close and reopen the current database. "
+            "Data is always fresh (lazy SQLite reads) so this is mainly "
+            "useful for lock management: release the agent lock so Gramps "
+            "Desktop can open the database, then call reload_database to "
+            "re-acquire the lock (or switch to read-only if Desktop is still open)."
         ),
         "schema": EmptyParams,
         "handler": reload_database_tool,
