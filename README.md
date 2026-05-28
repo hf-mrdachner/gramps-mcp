@@ -134,15 +134,19 @@ GRAMPS_PASSWORD=your-gramps-web-password
 GRAMPS_TREE_ID=your-tree-id  # System Information in Gramps Web
 ```
 
-**Direct backend** (read-only, no server required):
+**Direct SQLite backend** (read/write, no server required — points at the live DB):
+```bash
+GRAMPS_DB_PATH=/path/to/grampsdb/6a1764f8/sqlite.db
+```
+
+**Direct XML backend** (read-only, no Gramps installation required):
 ```bash
 GRAMPS_DB_PATH=/path/to/your/family-tree.gpkg  # or .gramps file
 ```
 
-When `GRAMPS_DB_PATH` is set it takes precedence over the web backend variables.
-The direct backend reads `.gpkg` archives (gzip-compressed Gramps XML) and plain
-`.gramps` XML files using only Python's standard library — no GTK or Gramps
-installation required.
+**No env var** — start the server without any preconfiguration and use the
+``list_databases`` and ``open_database`` MCP tools to connect at runtime.
+`GRAMPS_DB_PATH` takes precedence over web backend variables when both are set.
 
 ## MCP Client Configuration
 

@@ -365,52 +365,73 @@ def _is_sqlite_path(path: str) -> bool:
 
 def get_client():
     """
-    Return the appropriate client based on the current configuration.
+    Return the active Gramps client.
 
-    Selection logic when ``GRAMPS_DB_PATH`` is set:
+    Priority order:
 
-    - Path ends in ``.sqlite`` / ``.db``, or is a directory containing
-      ``sqlite.db`` → :class:`GrampsSqliteClient` (read/write, live DB)
-    - Path ends in ``.gpkg`` / ``.gramps`` → :class:`GrampsDirectClient`
-      (read-only, no Gramps installation needed)
+    1. **Runtime singleton** — set by :func:`open_database` (the
+       ``open_database`` MCP tool).  This takes precedence over all env
+       vars so the agent can switch databases at runtime without
+       restarting the server.
 
-    Falls back to :class:`GrampsWebAPIClient` when ``GRAMPS_DB_PATH`` is
-    not set.  All clients are cached as singletons so the database is
-    loaded only once per process.
+    2. **``GRAMPS_DB_PATH`` env var** — path to a ``.sqlite`` /
+       ``.gpkg`` / ``.gramps`` file.  A new client is created and cached
+       as a singleton.
+
+    3. **``GRAMPS_API_URL`` env var** — fall back to
+       :class:`GrampsWebAPIClient`.
+
+    4. **Nothing configured** — raises :class:`GrampsAPIError` with a
+       hint to call ``list_databases`` / ``open_database``.
 
     Returns:
-        The appropriate client instance.
+        The active client instance.
+
+    Raises:
+        GrampsAPIError: If no database is currently open or configured.
     """
     global _direct_client_singleton, _direct_client_path
+
+    # 1. Runtime singleton (set by open_database tool)
+    if _direct_client_singleton is not None:
+        return _direct_client_singleton
+
+    # 2. GRAMPS_DB_PATH env var
     settings = get_settings()
     if settings.use_direct_backend:
         path = settings.gramps_db_path
-        if (
-            _direct_client_singleton is None
-            or _direct_client_path != path
-        ):
-            if _is_sqlite_path(path):
-                from .sqlite_client import GrampsSqliteClient
-                locked_by = _read_lock(path)
-                externally_locked = bool(
-                    locked_by and "gramps_mcp" not in locked_by
+        if _is_sqlite_path(path):
+            from .sqlite_client import GrampsSqliteClient
+            locked_by = _read_lock(path)
+            externally_locked = bool(
+                locked_by and "gramps_mcp" not in locked_by
+            )
+            if externally_locked:
+                logger.warning(
+                    "Database '%s' locked by '%s' — opening read-only.",
+                    path, locked_by,
                 )
-                if externally_locked:
-                    logger.warning(
-                        "Database '%s' locked by '%s' — opening read-only.",
-                        path, locked_by,
-                    )
-                _direct_client_singleton = GrampsSqliteClient(
-                    path, read_only=externally_locked
-                )
-                if not externally_locked:
-                    _write_lock(path)
-            else:
-                from .direct_client import GrampsDirectClient
-                _direct_client_singleton = GrampsDirectClient(path)
-            _direct_client_path = path
+            _direct_client_singleton = GrampsSqliteClient(
+                path, read_only=externally_locked
+            )
+            if not externally_locked:
+                _write_lock(path)
+        else:
+            from .direct_client import GrampsDirectClient
+            _direct_client_singleton = GrampsDirectClient(path)
+        _direct_client_path = path
         return _direct_client_singleton
-    return GrampsWebAPIClient()
+
+    # 3. GRAMPS_API_URL env var
+    if settings.gramps_api_url:
+        return GrampsWebAPIClient()
+
+    # 4. Nothing configured
+    raise GrampsAPIError(
+        "No database connected. "
+        "Use list_databases to see available Gramps trees, "
+        "then open_database(path) to connect."
+    )
 
 
 def _lock_dir(db_path: str) -> str:

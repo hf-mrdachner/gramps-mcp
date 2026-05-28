@@ -64,7 +64,11 @@ class Settings(BaseModel):
     @model_validator(mode="after")
     def check_backend_config(self) -> "Settings":
         """
-        Validate that exactly one backend is configured.
+        Validate backend credentials when a web URL is supplied.
+
+        Starting without any backend configured is valid — the agent can
+        discover and open databases at runtime via the ``list_databases``
+        and ``open_database`` MCP tools.
 
         Args:
             None (validates self)
@@ -73,16 +77,11 @@ class Settings(BaseModel):
             Settings: self if valid
 
         Raises:
-            ValueError: If neither or both backends are configured
+            ValueError: If web credentials are incomplete.
         """
         has_web = bool(self.gramps_api_url)
         has_direct = bool(self.gramps_db_path)
 
-        if not has_web and not has_direct:
-            raise ValueError(
-                "No backend configured. Set GRAMPS_API_URL (web backend) "
-                "or GRAMPS_DB_PATH (direct backend)."
-            )
         if has_web and has_direct:
             logger.warning(
                 "Both GRAMPS_API_URL and GRAMPS_DB_PATH are set. "
