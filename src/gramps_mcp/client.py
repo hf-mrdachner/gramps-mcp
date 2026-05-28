@@ -346,6 +346,7 @@ class GrampsWebAPIClient:
 __all__ = [
     "GrampsWebAPIClient", "GrampsAPIError",
     "get_client", "open_database", "close_database", "reload_database",
+    "list_databases",
 ]
 
 
@@ -398,6 +399,79 @@ def get_client():
             _direct_client_path = path
         return _direct_client_singleton
     return GrampsWebAPIClient()
+
+
+def _gramps_db_root() -> str:
+    """
+    Return the platform-specific Gramps grampsdb directory.
+
+    Returns:
+        Absolute path to the grampsdb directory, or empty string if not found.
+    """
+    import os
+    import sys
+    candidates = []
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            candidates.append(os.path.join(appdata, "gramps", "grampsdb"))
+    else:
+        home = os.path.expanduser("~")
+        candidates += [
+            os.path.join(home, ".local", "share", "gramps", "grampsdb"),
+            os.path.join(home, ".gramps", "grampsdb"),
+        ]
+    for path in candidates:
+        if os.path.isdir(path):
+            return path
+    return ""
+
+
+def list_databases() -> list:
+    """
+    Return metadata for every Gramps database found on this machine.
+
+    Reads the Gramps ``grampsdb`` directory and inspects each tree's
+    ``name.txt`` and ``database.txt`` files.
+
+    Returns:
+        List of dicts with keys: ``id``, ``name``, ``backend``,
+        ``path`` (to the SQLite file or directory), ``writable``.
+    """
+    import os
+    root = _gramps_db_root()
+    if not root:
+        return []
+    results = []
+    for entry in sorted(os.listdir(root)):
+        tree_dir = os.path.join(root, entry)
+        if not os.path.isdir(tree_dir):
+            continue
+        name_file = os.path.join(tree_dir, "name.txt")
+        backend_file = os.path.join(tree_dir, "database.txt")
+        name = ""
+        backend = ""
+        if os.path.exists(name_file):
+            with open(name_file, encoding="utf-8") as f:
+                name = f.read().strip()
+        if os.path.exists(backend_file):
+            with open(backend_file, encoding="utf-8") as f:
+                backend = f.read().strip()
+        sqlite_path = os.path.join(tree_dir, "sqlite.db")
+        if os.path.exists(sqlite_path):
+            db_path = sqlite_path
+            writable = True
+        else:
+            db_path = tree_dir
+            writable = False
+        results.append({
+            "id": entry,
+            "name": name or entry,
+            "backend": backend or "unknown",
+            "path": db_path,
+            "writable": writable,
+        })
+    return results
 
 
 def _close_singleton() -> None:

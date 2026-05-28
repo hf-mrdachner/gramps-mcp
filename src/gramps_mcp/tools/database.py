@@ -29,7 +29,13 @@ from typing import Dict, List
 
 from mcp.types import TextContent
 
-from ..client import GrampsAPIError, close_database, open_database, reload_database
+from ..client import (
+    GrampsAPIError,
+    close_database,
+    list_databases,
+    open_database,
+    reload_database,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +54,42 @@ def _db_summary(client) -> str:
         f"  Media:        {db.count('media')}\n"
         f"  Repositories: {db.count('repository')}"
     )
+
+
+async def list_databases_tool(arguments: Dict) -> List[TextContent]:
+    """
+    List all Gramps databases found on this machine.
+
+    Reads the platform-specific Gramps ``grampsdb`` directory and
+    returns the name, backend type, and path for each tree.
+
+    Args:
+        arguments: Not used.
+
+    Returns:
+        Formatted list of available Gramps databases.
+    """
+    dbs = list_databases()
+    if not dbs:
+        return [TextContent(
+            type="text",
+            text=(
+                "No Gramps databases found on this machine.\n"
+                "Check that Gramps is installed and has at least one family tree."
+            ),
+        )]
+    lines = [f"Found {len(dbs)} Gramps database(s):\n"]
+    for db in dbs:
+        mode = "read/write" if db["writable"] else "read-only"
+        lines.append(
+            f"  {db['name']!r}  [{db['id']}]\n"
+            f"    Backend: {db['backend']}  ({mode})\n"
+            f"    Path:    {db['path']}"
+        )
+    lines.append(
+        "\nTo open one, call open_database with its path."
+    )
+    return [TextContent(type="text", text="\n".join(lines))]
 
 
 async def open_database_tool(arguments: Dict) -> List[TextContent]:

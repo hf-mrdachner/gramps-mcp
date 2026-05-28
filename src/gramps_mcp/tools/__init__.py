@@ -46,6 +46,7 @@ from .data_management import (
 )
 from .database import (
     close_database_tool,
+    list_databases_tool,
     open_database_tool,
     reload_database_tool,
 )
@@ -95,6 +96,7 @@ __all__ = [
     "get_ancestors_tool",
     "get_recent_changes_tool",
     # Database Lifecycle Tools
+    "list_databases_tool",
     "open_database_tool",
     "close_database_tool",
     "reload_database_tool",

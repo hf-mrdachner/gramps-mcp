@@ -67,6 +67,7 @@ from .tools import (
     get_descendants_tool,
     get_recent_changes_tool,
     get_tree_info_tool,
+    list_databases_tool,
     open_database_tool,
     reload_database_tool,
 )
@@ -228,6 +229,15 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "handler": get_recent_changes_tool,
     },
     # Database lifecycle
+    "list_databases": {
+        "description": (
+            "List all Gramps databases (family trees) found on this machine. "
+            "Shows name, backend type, path, and whether read/write access "
+            "is available. Use open_database with the shown path to connect."
+        ),
+        "schema": EmptyParams,
+        "handler": list_databases_tool,
+    },
     "open_database": {
         "description": (
             "Open a Gramps database file or directory. "
