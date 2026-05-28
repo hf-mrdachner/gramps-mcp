@@ -25,21 +25,24 @@ import gzip
 import logging
 import os
 import re
+import shutil
 import tarfile
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 
 from ._gramps_parsers import (
-    _parse_citation,
     _parse_event,
     _parse_family,
+    _parse_person,
+    _tag,
+)
+from ._gramps_parsers_ext import (
+    _parse_citation,
     _parse_media,
     _parse_note,
-    _parse_person,
     _parse_place,
     _parse_repository,
     _parse_source,
-    _tag,
 )
 from .client import GrampsAPIError
 
@@ -68,16 +71,18 @@ def _load_gpkg(path: str) -> "GrampsXmlDB":
     """Load a .gpkg or .gramps file into an in-memory GrampsXmlDB."""
     if path.lower().endswith(".gpkg"):
         tmp_dir = _extract_gpkg(path)
-        gramps_file = _find_gramps_file(tmp_dir)
+        try:
+            gramps_file = _find_gramps_file(tmp_dir)
+            content = _open_gramps_content(gramps_file)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
     elif path.lower().endswith(".gramps"):
-        gramps_file = path
+        content = _open_gramps_content(path)
     else:
         raise GrampsAPIError(
             f"Unsupported file type: '{path}'. "
             "GRAMPS_DB_PATH must point to a .gpkg or .gramps file."
         )
-
-    content = _open_gramps_content(gramps_file)
     return _parse_xml(content, source_name=os.path.basename(path))
 
 
@@ -342,7 +347,26 @@ class GrampsXmlDB:
         }
 
     def build_person_timeline(self, handle: str) -> List[Dict]:
-        """Person timeline: own events + family events, sorted ascending by year."""
+        """
+        Build a timeline for a person, sorted ascending by year.
+
+        Includes the person's own events (role from the event ref) and events
+        from families where the person is a spouse/parent (role ``Family``).
+        Each item carries a ``person`` sub-dict with ``relationship``,
+        ``name_given``, ``name_surname``, and ``gramps_id`` so the detail
+        handler can display participant context.
+
+        Args:
+            handle: Internal handle of the person.
+
+        Returns:
+            List of timeline item dicts ordered by year ascending.  Each dict
+            has keys: ``type``, ``gramps_id``, ``role``, ``handle``,
+            ``place`` (with ``display_name``), ``person``, ``date`` (year str).
+
+        Raises:
+            GrampsAPIError: If no person with the given handle exists.
+        """
         person = self.people.get(handle)
         if person is None:
             raise GrampsAPIError(f"person with handle '{handle}' not found")
@@ -393,7 +417,24 @@ class GrampsXmlDB:
         return items
 
     def build_family_timeline(self, handle: str) -> List[Dict]:
-        """Family timeline: own events + parents' events, sorted ascending by year."""
+        """
+        Build a timeline for a family, sorted ascending by year.
+
+        Includes the family's own events and the individual events of both
+        parents (father and mother).  Each parent event carries a ``person``
+        sub-dict with ``relationship`` (``father`` or ``mother``), name parts,
+        and ``gramps_id``.
+
+        Args:
+            handle: Internal handle of the family.
+
+        Returns:
+            List of timeline item dicts ordered by year ascending.  Same
+            structure as :meth:`build_person_timeline`.
+
+        Raises:
+            GrampsAPIError: If no family with the given handle exists.
+        """
         fam = self.families.get(handle)
         if fam is None:
             raise GrampsAPIError(f"family with handle '{handle}' not found")

@@ -79,6 +79,28 @@ class GrampsDirectClient:
         with_headers: bool = False,
         **url_params,
     ):
+        """
+        Dispatch an API call to the in-memory Gramps database.
+
+        Mirrors the GrampsWebAPIClient interface so all MCP tools work
+        without modification.  Write operations raise GrampsAPIError.
+
+        Args:
+            api_call: The API endpoint to call (from ApiCalls enum).
+            params: Query parameters as a dict or Pydantic model.
+            tree_id: Ignored; present for interface compatibility.
+            with_headers: If True, return (result, headers) tuple where
+                headers contains ``x-total-count``.
+            **url_params: Path parameters such as ``handle``, ``report_id``,
+                or ``filename``.
+
+        Returns:
+            The API result (list or dict), or a (result, headers) tuple
+            when *with_headers* is True.
+
+        Raises:
+            GrampsAPIError: For write operations or unsupported calls.
+        """
         params_dict: Dict = {}
         if params is not None:
             if isinstance(params, BaseModel):
@@ -96,6 +118,17 @@ class GrampsDirectClient:
     async def upload_media_file(
         self, file_content: bytes, mime_type: str, tree_id: str = "default"
     ):
+        """
+        Not supported in direct (read-only) mode.
+
+        Args:
+            file_content: Raw file bytes (unused).
+            mime_type: MIME type of the file (unused).
+            tree_id: Tree identifier (unused).
+
+        Raises:
+            GrampsAPIError: Always — the direct backend is read-only.
+        """
         raise GrampsAPIError(
             "upload_media_file is not supported in direct (read-only) mode."
         )
@@ -183,7 +216,7 @@ class GrampsDirectClient:
         if api_call == ApiCalls.GET_REPORT_PROCESSED:
             filename = url_params.get("filename", "")
             if filename in self._report_cache:
-                return {"raw_content": self._report_cache.pop(filename)}
+                return {"raw_content": self._report_cache[filename]}
             raise GrampsAPIError(
                 f"No cached report for '{filename}'. "
                 "Call POST_REPORT_FILE first to generate the report."

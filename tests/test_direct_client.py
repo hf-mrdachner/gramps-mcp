@@ -914,7 +914,8 @@ class TestTraversal:
         assert "No ancestors found" in report["raw_content"]
 
     @pytest.mark.asyncio
-    async def test_report_cache_consumed_after_get(self, client):
+    async def test_report_cache_idempotent_get(self, client):
+        """GET_REPORT_PROCESSED is idempotent — a second call returns the same report."""
         import json
         gen = await client.make_api_call(
             ApiCalls.POST_REPORT_FILE,
@@ -922,17 +923,17 @@ class TestTraversal:
             report_id="descend_report",
         )
         filename = gen["file_name"]
-        await client.make_api_call(
+        result1 = await client.make_api_call(
             ApiCalls.GET_REPORT_PROCESSED,
             report_id="descend_report",
             filename=filename,
         )
-        with pytest.raises(GrampsAPIError, match="No cached report"):
-            await client.make_api_call(
-                ApiCalls.GET_REPORT_PROCESSED,
-                report_id="descend_report",
-                filename=filename,
-            )
+        result2 = await client.make_api_call(
+            ApiCalls.GET_REPORT_PROCESSED,
+            report_id="descend_report",
+            filename=filename,
+        )
+        assert result1["raw_content"] == result2["raw_content"]
 
     @pytest.mark.asyncio
     async def test_unsupported_report_id_raises(self, client):

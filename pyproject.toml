@@ -46,6 +46,7 @@ dev = [
     "pre-commit>=4.3.0",
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-cov>=7.1.0",
     "requests>=2.31.0",
     "ruff>=0.1.0",
     "tdd-guard-pytest>=0.1.2",

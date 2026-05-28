@@ -128,15 +128,38 @@ def _find_date(el) -> Dict:
 
 
 def _parse_name(name_el) -> Dict:
-    """Parse a <name> element into a primary_name dict."""
+    """
+    Parse a ``<name>`` element into a primary_name dict.
+
+    Args:
+        name_el: ``<name>`` XML element.
+
+    Returns:
+        Dict with keys: ``first_name``, ``surname_list``, ``suffix``,
+        ``title``, ``call``, ``nick``, ``type``.
+    """
     children = {_tag(c): c for c in name_el}
 
-    # Surname: <surname> (1.7+) or <last> (older)
+    # Build surname_list from all <surname> children (Gramps 1.7+ allows multiple
+    # for compound/patronymic names). Fall back to <last> for older files.
     # Note: must use 'is not None' — xml.etree elements are falsy when childless
-    sn_el = children.get("surname")
-    if sn_el is None:
-        sn_el = children.get("last")
-    surname = sn_el.text.strip() if sn_el is not None and sn_el.text else ""
+    surname_els = [c for c in name_el if _tag(c) == "surname"]
+    if surname_els:
+        surname_list = [
+            {
+                "surname": s.text.strip() if s.text else "",
+                "primary": i == 0,
+                "prefix": "",
+                "connector": "",
+            }
+            for i, s in enumerate(surname_els)
+        ]
+    else:
+        last_el = children.get("last")
+        last = last_el.text.strip() if last_el is not None and last_el.text else ""
+        surname_list = [
+            {"surname": last, "primary": True, "prefix": "", "connector": ""}
+        ]
 
     fn_el = children.get("first")
     first = fn_el.text.strip() if fn_el is not None and fn_el.text else ""
@@ -155,9 +178,7 @@ def _parse_name(name_el) -> Dict:
 
     return {
         "first_name": first,
-        "surname_list": [
-            {"surname": surname, "primary": True, "prefix": "", "connector": ""}
-        ],
+        "surname_list": surname_list,
         "suffix": suffix,
         "title": title,
         "call": call,
@@ -167,7 +188,16 @@ def _parse_name(name_el) -> Dict:
 
 
 def _parse_address(el) -> Dict:
-    """Parse an <address> element to an address dict."""
+    """
+    Parse an ``<address>`` element to an address dict.
+
+    Args:
+        el: ``<address>`` XML element.
+
+    Returns:
+        Dict with keys: ``street``, ``locality``, ``city``, ``county``,
+        ``state``, ``country``, ``postal``, ``phone``, ``date``, ``note_list``.
+    """
     return {
         "street": _text(el, "street"),
         "locality": _text(el, "locality"),
@@ -183,7 +213,21 @@ def _parse_address(el) -> Dict:
 
 
 def _parse_person(el, events_by_handle: Dict) -> Dict:
-    """Convert a <person> element to a dict matching the Web API format."""
+    """
+    Convert a ``<person>`` element to a Web API-compatible dict.
+
+    Args:
+        el: ``<person>`` XML element.
+        events_by_handle: Pre-built event index keyed by handle, used to
+            resolve ``birth_ref_index`` and ``death_ref_index``.
+
+    Returns:
+        Dict with keys: ``handle``, ``gramps_id``, ``change``, ``gender``,
+        ``primary_name``, ``birth_ref_index``, ``death_ref_index``,
+        ``event_ref_list``, ``family_list``, ``parent_family_list``,
+        ``note_list``, ``citation_list``, ``media_list``, ``urls``,
+        ``address_list``.
+    """
     handle = el.get("handle", "")
     gramps_id = el.get("id", "")
 
@@ -261,7 +305,16 @@ def _parse_person(el, events_by_handle: Dict) -> Dict:
 
 
 def _parse_event(el) -> Dict:
-    """Convert an <event> element to dict."""
+    """
+    Convert an ``<event>`` element to a Web API-compatible dict.
+
+    Args:
+        el: ``<event>`` XML element.
+
+    Returns:
+        Dict with keys: ``handle``, ``gramps_id``, ``change``, ``type``,
+        ``date``, ``place``, ``description``, ``note_list``, ``citation_list``.
+    """
     handle = el.get("handle", "")
     gramps_id = el.get("id", "")
 
@@ -286,7 +339,18 @@ def _parse_event(el) -> Dict:
 
 
 def _parse_family(el) -> Dict:
-    """Convert a <family> element to dict."""
+    """
+    Convert a ``<family>`` element to a Web API-compatible dict.
+
+    Args:
+        el: ``<family>`` XML element.
+
+    Returns:
+        Dict with keys: ``handle``, ``gramps_id``, ``change``,
+        ``father_handle``, ``mother_handle``, ``child_ref_list``,
+        ``event_ref_list``, ``relationship``, ``note_list``,
+        ``citation_list``, ``media_list``.
+    """
     handle = el.get("handle", "")
     gramps_id = el.get("id", "")
 
@@ -326,166 +390,4 @@ def _parse_family(el) -> Dict:
         "note_list": [c.get("hlink", "") for c in el if _tag(c) == "noteref"],
         "citation_list": [c.get("hlink", "") for c in el if _tag(c) == "citationref"],
         "media_list": [{"ref": c.get("hlink", "")} for c in el if _tag(c) == "objref"],
-    }
-
-
-def _parse_place(el) -> Dict:
-    """Convert a <placeobj> element to dict."""
-    handle = el.get("handle", "")
-    gramps_id = el.get("id", "")
-
-    ptitle_el = next((c for c in el if _tag(c) == "ptitle"), None)
-    pname_el = next((c for c in el if _tag(c) == "pname"), None)
-
-    title = ptitle_el.text.strip() if ptitle_el is not None and ptitle_el.text else ""
-    pname_value = pname_el.get("value", "") if pname_el is not None else ""
-    display_name = pname_value or title
-
-    placeref_list = [
-        {"ref": c.get("hlink", "")} for c in el if _tag(c) == "placeref"
-    ]
-
-    return {
-        "gramps_id": gramps_id,
-        "handle": handle,
-        "change": int(el.get("change", "0") or "0"),
-        "title": title,
-        "name": {"value": display_name},
-        "place_type": el.get("type", ""),
-        "placeref_list": placeref_list,
-        "urls": [
-            {
-                "path": u.get("href", ""),
-                "description": u.get("description", ""),
-                "type": u.get("type", ""),
-            }
-            for u in el
-            if _tag(u) == "url"
-        ],
-    }
-
-
-def _parse_source(el) -> Dict:
-    """Convert a <source> element to dict."""
-    handle = el.get("handle", "")
-    gramps_id = el.get("id", "")
-
-    return {
-        "gramps_id": gramps_id,
-        "handle": handle,
-        "change": int(el.get("change", "0") or "0"),
-        "title": _text(el, "stitle"),
-        "author": _text(el, "sauthor"),
-        "pubinfo": _text(el, "spubinfo"),
-        "abbrev": _text(el, "sabbrev"),
-        "note_list": [c.get("hlink", "") for c in el if _tag(c) == "noteref"],
-        "media_list": [
-            {"ref": c.get("hlink", "")} for c in el if _tag(c) == "objref"
-        ],
-        "reporef_list": [
-            {
-                "ref": c.get("hlink", ""),
-                "callno": c.get("callno", ""),
-                "medium": c.get("medium", ""),
-            }
-            for c in el
-            if _tag(c) == "reporef"
-        ],
-        "attribute_list": [
-            {"key": c.get("key", ""), "value": c.get("value", "")}
-            for c in el
-            if _tag(c) == "data_item"
-        ],
-    }
-
-
-def _parse_citation(el) -> Dict:
-    """Convert a <citation> element to dict."""
-    handle = el.get("handle", "")
-    gramps_id = el.get("id", "")
-
-    page = _text(el, "page")
-    confidence_str = _text(el, "confidence")
-    confidence = int(confidence_str) if confidence_str.isdigit() else 0
-
-    sourceref_el = next((c for c in el if _tag(c) == "sourceref"), None)
-    source_handle = sourceref_el.get("hlink", "") if sourceref_el is not None else ""
-
-    return {
-        "gramps_id": gramps_id,
-        "handle": handle,
-        "change": int(el.get("change", "0") or "0"),
-        "page": page,
-        "confidence": confidence,
-        "source_handle": source_handle,
-        "date": _find_date(el),
-        "note_list": [c.get("hlink", "") for c in el if _tag(c) == "noteref"],
-    }
-
-
-def _parse_note(el) -> Dict:
-    """Convert a <note> element to dict."""
-    handle = el.get("handle", "")
-    gramps_id = el.get("id", "")
-
-    text_el = next((c for c in el if _tag(c) == "text"), None)
-    text = text_el.text.strip() if text_el is not None and text_el.text else ""
-
-    return {
-        "gramps_id": gramps_id,
-        "handle": handle,
-        "change": int(el.get("change", "0") or "0"),
-        "type": el.get("type", ""),
-        "text": {"string": text},
-    }
-
-
-def _parse_media(el) -> Dict:
-    """Convert an <object> element to dict."""
-    handle = el.get("handle", "")
-    gramps_id = el.get("id", "")
-
-    file_el = next((c for c in el if _tag(c) == "file"), None)
-    src = file_el.get("src", "") if file_el is not None else ""
-    mime = file_el.get("mime", "") if file_el is not None else ""
-    description = file_el.get("description", "") if file_el is not None else ""
-    checksum = file_el.get("checksum", "") if file_el is not None else ""
-
-    return {
-        "gramps_id": gramps_id,
-        "handle": handle,
-        "change": int(el.get("change", "0") or "0"),
-        "path": src,
-        "mime": mime,
-        "desc": description,
-        "checksum": checksum,
-        "date": _find_date(el),
-        "note_list": [c.get("hlink", "") for c in el if _tag(c) == "noteref"],
-    }
-
-
-def _parse_repository(el) -> Dict:
-    """Convert a <repository> element to dict."""
-    handle = el.get("handle", "")
-    gramps_id = el.get("id", "")
-
-    name = _text(el, "rname") or gramps_id
-    repo_type = _text(el, "type")
-
-    return {
-        "gramps_id": gramps_id,
-        "handle": handle,
-        "change": int(el.get("change", "0") or "0"),
-        "name": name,
-        "type": repo_type,
-        "urls": [
-            {
-                "path": u.get("href", ""),
-                "description": u.get("description", ""),
-                "type": u.get("type", ""),
-            }
-            for u in el
-            if _tag(u) == "url"
-        ],
-        "note_list": [c.get("hlink", "") for c in el if _tag(c) == "noteref"],
     }

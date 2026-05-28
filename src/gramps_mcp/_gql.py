@@ -35,7 +35,28 @@ from typing import Any, Dict, Optional
 
 
 def gql_match(obj: Dict, gql: str) -> bool:
-    """Return True if *obj* matches the GQL filter expression."""
+    """
+    Return True if *obj* matches the GQL filter expression.
+
+    Supports a subset of the Gramps Query Language:
+
+    - Dot-path property access: ``primary_name.first_name``
+    - Array indexing: ``surname_list[0].surname``
+    - ``.length`` pseudo-property: ``media_list.length > 0``
+    - Operators: ``=``  ``!=``  ``~``  ``!~``  ``>``  ``>=``  ``<``  ``<=``
+    - Conjunctions: ``and`` / ``or``  (``and`` binds tighter)
+    - Boolean truthy check (no operator): ``media_list``
+
+    Unsupported pseudo-properties (``any``, ``all``, ``get_*``) evaluate to
+    ``False`` rather than raising an error.
+
+    Args:
+        obj: The Gramps object dict to test (person, family, event, …).
+        gql: GQL filter expression string.
+
+    Returns:
+        True if the expression matches, False otherwise.
+    """
     gql = gql.strip()
     if not gql:
         return True
@@ -47,12 +68,13 @@ def gql_match(obj: Dict, gql: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def _or_expr(obj: Dict, expr: str) -> bool:
-    parts = re.split(r"\bor\b", expr, flags=re.IGNORECASE)
+    # Require whitespace on both sides so bare values like "type = or" are not split.
+    parts = re.split(r"\s+or\s+", expr, flags=re.IGNORECASE)
     return any(_and_expr(obj, p.strip()) for p in parts if p.strip())
 
 
 def _and_expr(obj: Dict, expr: str) -> bool:
-    parts = re.split(r"\band\b", expr, flags=re.IGNORECASE)
+    parts = re.split(r"\s+and\s+", expr, flags=re.IGNORECASE)
     return all(_single(obj, p.strip()) for p in parts if p.strip())
 
 
@@ -71,7 +93,11 @@ _OPS = [
 
 def _single(obj: Dict, expr: str) -> bool:
     """Evaluate one predicate (no and/or)."""
-    expr = expr.strip().strip("()")
+    expr = expr.strip()
+    # Strip at most one layer of matched outer parentheses.
+    # Using strip("()") would also eat parens that are part of a value.
+    if expr.startswith("(") and expr.endswith(")"):
+        expr = expr[1:-1].strip()
 
     for op, fn in _OPS:
         if op in expr:

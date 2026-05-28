@@ -24,14 +24,16 @@ Two backends are supported:
 Exactly one backend must be configured.
 """
 
+import logging
 import os
 from typing import Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, HttpUrl, ValidationError, model_validator
 
-# Load environment variables from .env file
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseModel):
@@ -80,6 +82,12 @@ class Settings(BaseModel):
             raise ValueError(
                 "No backend configured. Set GRAMPS_API_URL (web backend) "
                 "or GRAMPS_DB_PATH (direct backend)."
+            )
+        if has_web and has_direct:
+            logger.warning(
+                "Both GRAMPS_API_URL and GRAMPS_DB_PATH are set. "
+                "The direct backend (GRAMPS_DB_PATH) takes precedence; "
+                "web credentials are ignored."
             )
         if has_web and not self.gramps_username:
             raise ValueError("GRAMPS_USERNAME is required when GRAMPS_API_URL is set.")
