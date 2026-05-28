@@ -81,9 +81,15 @@ async def list_databases_tool(arguments: Dict) -> List[TextContent]:
     lines = [f"Found {len(dbs)} Gramps database(s):\n"]
     for db in dbs:
         mode = "read/write" if db["writable"] else "read-only"
+        locked_by = db.get("locked_by", "")
+        lock_info = ""
+        if "gramps_mcp" in locked_by:
+            lock_info = "  🔒 locked by gramps_mcp (this agent)"
+        elif locked_by:
+            lock_info = f"  🔒 locked by {locked_by} (Gramps Desktop?)"
         lines.append(
             f"  {db['name']!r}  [{db['id']}]\n"
-            f"    Backend: {db['backend']}  ({mode})\n"
+            f"    Backend: {db['backend']}  ({mode}){lock_info}\n"
             f"    Path:    {db['path']}"
         )
     lines.append(
@@ -110,15 +116,21 @@ async def open_database_tool(arguments: Dict) -> List[TextContent]:
     if not path:
         return [TextContent(type="text", text="Error: 'path' is required.")]
     try:
-        client = open_database(path)
+        client, locked_by = open_database(path)
         is_sqlite = hasattr(client._db, "_conn")
         mode = "read/write (SQLite)" if is_sqlite else "read-only (XML)"
-        msg = (
-            f"Database opened in {mode} mode.\n"
-            f"Path: {path}\n\n"
-            f"Record counts:\n{_db_summary(client)}"
-        )
-        return [TextContent(type="text", text=msg)]
+        lines = [
+            f"Database opened in {mode} mode.",
+            f"Path: {path}",
+        ]
+        if locked_by and "gramps_mcp" not in locked_by:
+            lines.append(
+                f"\n⚠️  Warning: this database also appears to be open in "
+                f"Gramps Desktop ({locked_by}). "
+                "Concurrent writes may conflict."
+            )
+        lines.append(f"\nRecord counts:\n{_db_summary(client)}")
+        return [TextContent(type="text", text="\n".join(lines))]
     except GrampsAPIError as exc:
         return [TextContent(type="text", text=f"Error: {exc}")]
     except Exception as exc:
@@ -166,7 +178,7 @@ async def reload_database_tool(arguments: Dict) -> List[TextContent]:
         Confirmation message with refreshed record counts.
     """
     try:
-        client = reload_database()
+        client, _ = reload_database()
         is_sqlite = hasattr(client._db, "_conn")
         mode = "read/write (SQLite)" if is_sqlite else "read-only (XML)"
         msg = (
