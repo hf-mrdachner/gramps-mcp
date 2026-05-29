@@ -1,19 +1,3 @@
-### Fork Context
-This is a fork of [cabout-me/gramps-mcp](https://github.com/cabout-me/gramps-mcp) with one primary goal:
-**Add a direct backend that accesses a local Gramps database via the Gramps Python API**, without needing a running Gramps Web API server.
-
-Two backends are supported, selected via environment variables:
-- **Web backend** (original): set `GRAMPS_API_URL` + `GRAMPS_USERNAME` + `GRAMPS_PASSWORD`
-- **Direct backend** (new): set `GRAMPS_DB_PATH` to a Gramps database name or path to a `.gpkg` file
-
-The direct backend lives in `src/gramps_mcp/direct_client.py` and implements the same
-`make_api_call(api_call, params, tree_id, **url_params)` interface as `GrampsWebAPIClient`.
-All tools use the `get_client()` factory from `client.py` — no tool code changes needed.
-
-The direct backend reads `.gpkg` / `.gramps` files using only Python's standard library
-(`xml.etree`, `tarfile`, `gzip`). **It does NOT require the `gramps` Python package** —
-that package is unavailable on Windows without system GTK/GLib and is unnecessary here.
-
 ### Project Awareness & Context
 - **Always read `README.md`** at the start of a new conversation to understand the project's setup, features, and usage.
 - **Use consistent naming conventions, file structure, and architecture patterns** following Python and MCP best practices.
