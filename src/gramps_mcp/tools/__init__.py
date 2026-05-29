@@ -49,6 +49,11 @@ from .database import (
     list_databases_tool,
     open_database_tool,
 )
+from .merge_persons import (
+    find_duplicate_persons_tool,
+    merge_persons_tool,
+    split_person_tool,
+)
 from .search_basic import (
     find_anything_tool,
     find_citation_tool,
@@ -98,4 +103,8 @@ __all__ = [
     "list_databases_tool",
     "open_database_tool",
     "close_database_tool",
+    # Merge Tools (SQLite backend only)
+    "find_duplicate_persons_tool",
+    "merge_persons_tool",
+    "split_person_tool",
 ]

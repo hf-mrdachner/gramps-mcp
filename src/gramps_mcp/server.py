@@ -49,10 +49,18 @@ from .models.parameters.simple_params import (
 )
 from .models.parameters.source_params import SourceSaveParams
 from .models.parameters.transactions_params import TransactionHistoryParams
+from .models.parameters.merge_params import (
+    FindDuplicatesParams,
+    MergePersonsParams,
+    SplitPersonParams,
+)
 
 # Import all tool functions
 from .tools import (
     close_database_tool,
+    find_duplicate_persons_tool,
+    merge_persons_tool,
+    split_person_tool,
     create_citation_tool,
     create_event_tool,
     create_family_tool,
@@ -255,6 +263,38 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         ),
         "schema": EmptyParams,
         "handler": close_database_tool,
+    },
+    # Merge tools (SQLite backend only)
+    "find_duplicate_persons": {
+        "description": (
+            "Scan the genealogy database for duplicate person records. "
+            "Compares all persons by name (with German umlaut normalisation), "
+            "birth year, suffix (Roman numerals), gender, and shared relatives. "
+            "Returns ranked candidate pairs — review before merging. "
+            "SQLite backend only."
+        ),
+        "schema": FindDuplicatesParams,
+        "handler": find_duplicate_persons_tool,
+    },
+    "merge_persons": {
+        "description": (
+            "Merge a duplicate person (loser) into another (winner). "
+            "Combines events, citations, notes and family links. "
+            "Duplicate events (same type, date, place) are deduplicated. "
+            "Set dry_run=False to apply; a backup is saved for undo. "
+            "SQLite backend only."
+        ),
+        "schema": MergePersonsParams,
+        "handler": merge_persons_tool,
+    },
+    "split_person": {
+        "description": (
+            "Undo a previous merge_persons call by recreating the absorbed person. "
+            "Reads the merge backup file. The winner record is not modified automatically. "
+            "SQLite backend only."
+        ),
+        "schema": SplitPersonParams,
+        "handler": split_person_tool,
     },
 }
 
