@@ -116,20 +116,31 @@ def _place_name(place_handle: str, places: dict) -> str:
     return ""
 
 
+_MONTH_NAMES = [
+    "", "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+
+
 def _event_date(ev: dict) -> str:
+    """Return a human-readable date string from a Gramps event dict."""
     date = ev.get("date", {})
     if not isinstance(date, dict):
         return ""
-    # Prefer text representation
+    # Prefer free-text representation (already localised by Gramps)
     text = date.get("text", "").strip()
     if text:
         return _localise_date(text)
-    # Fall back to structured dateval
-    dv = date.get("dateval", {})
-    if isinstance(dv, dict):
-        val = dv.get("val", "")
-        return _localise_date(str(val)) if val else ""
-    return ""
+    # Structured dateval: [day, month, year, slash]
+    dv = date.get("dateval", [0, 0, 0, False])
+    if not isinstance(dv, list) or len(dv) < 3 or not dv[2]:
+        return ""
+    day, month, year = int(dv[0]), int(dv[1]), int(dv[2])
+    if day and 1 <= month <= 12:
+        return f"{day} {_MONTH_NAMES[month]} {year}"
+    if 1 <= month <= 12:
+        return f"{_MONTH_NAMES[month]} {year}"
+    return str(year)
 
 
 def _citations_for_event(ev: dict, citations: dict, sources: dict) -> List[str]:
@@ -201,12 +212,14 @@ def prepare_biography(
     flavor: str = "wikitree",
     language: str = "en",
     include_events: Optional[List[str]] = None,
+    conn=None,
 ) -> str:
     """
     Generate export biography markup for a Gramps person.
 
     flavor  — target platform format, currently only "wikitree"
     language — output language, currently only "en"
+    conn    — optional raw SQLite connection; if None, extracted from active client
 
     Returns the biography as a string ready to paste into the target platform.
     """
@@ -215,12 +228,13 @@ def prepare_biography(
     if language != "en":
         raise NotImplementedError("Only language='en' is currently supported.")
 
-    client = get_client()
-    from ..sqlite_client import GrampsSqliteClient
-    if not isinstance(client, GrampsSqliteClient):
-        raise GrampsAPIError("prepare_wikitree_biography requires the SQLite backend.")
+    if conn is None:
+        client = get_client()
+        from ..sqlite_client import GrampsSqliteClient
+        if not isinstance(client, GrampsSqliteClient):
+            raise GrampsAPIError("prepare_wikitree_biography requires the SQLite backend.")
+        conn = client._db._conn
 
-    conn = client._db._conn
     sources, citations, places = _load_maps(conn)
 
     # Load person
