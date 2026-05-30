@@ -49,21 +49,31 @@ def _format_error_response(error: Exception, operation: str) -> List[TextContent
 @with_client
 async def get_person_tool(client, arguments: Dict) -> List[TextContent]:
     """
-    Get comprehensive person information using direct API calls.
+    Get comprehensive person information including parents, siblings, spouse and children.
+    Accepts gramps_id (e.g. 'I0001') or person_handle.
     """
     try:
-        # Extract handle from arguments
-        handle = arguments.get("person_handle")
-        if not handle:
-            raise ValueError("person_handle is required")
+        handle = arguments.get("person_handle") or arguments.get("handle")
+        gramps_id = arguments.get("gramps_id")
 
-        # Get tree_id from settings
         settings = get_settings()
         tree_id = settings.gramps_tree_id
 
-        # Use the detailed person handler to get comprehensive formatted data
-        formatted_person = await format_person_detail(client, tree_id, handle)
+        # Resolve gramps_id to handle if needed
+        if not handle and gramps_id:
+            from ..models.api_calls import ApiCalls
+            people = await client.make_api_call(
+                ApiCalls.GET_PEOPLE, tree_id=tree_id,
+                params={"gramps_id": gramps_id, "pagesize": 1},
+            )
+            if not people:
+                return [TextContent(type="text", text=f"Person {gramps_id} not found")]
+            handle = people[0].get("handle", "")
 
+        if not handle:
+            raise ValueError("gramps_id or person_handle required")
+
+        formatted_person = await format_person_detail(client, tree_id, handle)
         return [TextContent(type="text", text=formatted_person)]
 
     except Exception as e:

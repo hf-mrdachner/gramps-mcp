@@ -87,7 +87,7 @@ async def find_duplicate_persons_tool(arguments: Dict) -> List[TextContent]:
     Only available with the SQLite backend.
     """
     params = FindDuplicatesParams(**arguments)
-    client = await get_client()
+    client = get_client()
     try:
         conn = _get_sqlite_conn(client)
         candidates = find_duplicate_persons(
@@ -126,7 +126,7 @@ async def find_duplicate_persons_tool(arguments: Dict) -> List[TextContent]:
     except GrampsAPIError as e:
         return [TextContent(type="text", text=f"Error: {e}")]
     finally:
-        await client.close()
+        pass  # SQLite singleton — do not close
 
 
 async def merge_persons_tool(arguments: Dict) -> List[TextContent]:
@@ -144,7 +144,7 @@ async def merge_persons_tool(arguments: Dict) -> List[TextContent]:
     Only available with the SQLite backend.
     """
     params = MergePersonsParams(**arguments)
-    client = await get_client()
+    client = get_client()
     try:
         conn = _get_sqlite_conn(client)
 
@@ -188,7 +188,7 @@ async def merge_persons_tool(arguments: Dict) -> List[TextContent]:
     except GrampsAPIError as e:
         return [TextContent(type="text", text=f"Error: {e}")]
     finally:
-        await client.close()
+        pass  # SQLite singleton — do not close
 
 
 async def split_person_tool(arguments: Dict) -> List[TextContent]:
@@ -203,7 +203,7 @@ async def split_person_tool(arguments: Dict) -> List[TextContent]:
     call with dry_run=False.
     """
     params = SplitPersonParams(**arguments)
-    client = await get_client()
+    client = get_client()
     try:
         conn = _get_sqlite_conn(client)
         backup = _backup_file(client)
@@ -227,4 +227,4 @@ async def split_person_tool(arguments: Dict) -> List[TextContent]:
     except GrampsAPIError as e:
         return [TextContent(type="text", text=f"Error: {e}")]
     finally:
-        await client.close()
+        pass  # SQLite singleton — do not close
