@@ -79,7 +79,12 @@ from .tools import (
     open_database_tool,
 )
 from .tools.search_basic import find_type_tool
-from .tools.search_details import get_person_tool, get_type_tool
+from .tools.search_details import (
+    find_duplicate_citations_tool,
+    get_event_tool, get_person_tool, get_place_tool,
+    merge_citations_tool, merge_events_tool, merge_families_tool, merge_places_tool,
+    get_type_tool,
+)
 from .tools.wikitree_export import prepare_biography_tool
 
 
@@ -135,6 +140,43 @@ class GetPersonParams(BaseModel):
     gramps_id: str = Field(..., description="Gramps person ID (e.g. 'I0001')")
 
 
+class GetEventParams(BaseModel):
+    gramps_id: str = Field(..., description="Gramps event ID (e.g. 'E0001')")
+
+
+class GetPlaceParams(BaseModel):
+    gramps_id: str = Field(..., description="Gramps place ID (e.g. 'P0001')")
+
+
+class MergePlacesParams(BaseModel):
+    winner_id: str = Field(..., description="Gramps place ID to keep (e.g. 'P0001')")
+    loser_id: str = Field(..., description="Gramps place ID to absorb into winner")
+    dry_run: bool = Field(True, description="If True (default), show planned changes without writing")
+
+
+class MergeFamiliesParams(BaseModel):
+    winner_id: str = Field(..., description="Gramps family ID to keep (e.g. 'F0001')")
+    loser_id: str = Field(..., description="Gramps family ID to absorb into winner")
+    dry_run: bool = Field(True, description="If True (default), show planned changes without writing")
+
+
+class MergeEventsParams(BaseModel):
+    winner_id: str = Field(..., description="Gramps event ID to keep (e.g. 'E0001')")
+    loser_id: str = Field(..., description="Gramps event ID to absorb; its citations are transferred to winner")
+    dry_run: bool = Field(True, description="If True (default), show planned changes without writing")
+
+
+class MergeCitationsParams(BaseModel):
+    winner_id: str = Field(..., description="Gramps citation ID to keep (e.g. 'C0001')")
+    loser_id: str = Field(..., description="Gramps citation ID to absorb into winner")
+    dry_run: bool = Field(True, description="If True (default), show planned changes without writing")
+
+
+class FindDuplicateCitationsParams(BaseModel):
+    max_results: int = Field(50, description="Maximum number of duplicate groups to show")
+    source_filter: Optional[str] = Field(None, description="Filter by source title substring (case-insensitive)")
+
+
 class PrepareBiographyParams(BaseModel):
     gramps_id: str = Field(..., description="Gramps person ID (e.g. 'I0001')")
     flavor: str = Field("wikitree", description="Target platform format: 'wikitree'")
@@ -177,6 +219,72 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         ),
         "schema": GetPersonParams,
         "handler": get_person_tool,
+    },
+    "get_event": {
+        "description": (
+            "Get event details by gramps_id (type, date, place, citations) "
+            "and find which persons have this event attached. "
+            "Use this to navigate from an event back to the person(s) involved."
+        ),
+        "schema": GetEventParams,
+        "handler": get_event_tool,
+    },
+    "get_place": {
+        "description": (
+            "Get place details (type, coordinates, URLs) and all events with persons "
+            "at this place, sorted by date. Use this to see everyone connected to a "
+            "location and to identify duplicate place records."
+        ),
+        "schema": GetPlaceParams,
+        "handler": get_place_tool,
+    },
+    "merge_places": {
+        "description": (
+            "Merge a duplicate place (loser) into a canonical place (winner) by "
+            "redirecting all events from loser to winner. "
+            "dry_run=True (default) shows planned changes without writing. "
+            "Set dry_run=False to apply. Winner place keeps its data; loser is deleted."
+        ),
+        "schema": MergePlacesParams,
+        "handler": merge_places_tool,
+    },
+    "merge_families": {
+        "description": (
+            "Merge a duplicate family (loser) into a canonical family (winner). "
+            "Updates all person family_list and parent_family_list references, "
+            "then deletes the loser family. dry_run=True (default) shows planned changes."
+        ),
+        "schema": MergeFamiliesParams,
+        "handler": merge_families_tool,
+    },
+    "merge_events": {
+        "description": (
+            "Merge a duplicate event (loser) into a canonical event (winner). "
+            "Transfers all citations from loser to winner (no data loss), "
+            "removes loser from all person event_ref_lists, then deletes loser. "
+            "dry_run=True (default) shows planned changes without writing."
+        ),
+        "schema": MergeEventsParams,
+        "handler": merge_events_tool,
+    },
+    "merge_citations": {
+        "description": (
+            "Merge a duplicate citation (loser) into a canonical citation (winner). "
+            "Redirects all event citation references from loser to winner, then deletes loser. "
+            "dry_run=True (default) shows planned changes without writing."
+        ),
+        "schema": MergeCitationsParams,
+        "handler": merge_citations_tool,
+    },
+    "find_duplicate_citations": {
+        "description": (
+            "Find duplicate citations grouped by (source, page). "
+            "Two citations are duplicates when they reference the same source at the same page. "
+            "Use source_filter to narrow results to a specific collection. "
+            "Returns candidate groups for merge_citations."
+        ),
+        "schema": FindDuplicateCitationsParams,
+        "handler": find_duplicate_citations_tool,
     },
     # Data Management Tools
     "create_person": {
@@ -422,7 +530,7 @@ async def root(request):
             "version": "1.0.0",
             "description": "MCP server for Gramps Web API genealogy operations",
             "mcp_endpoint": "/mcp",
-            "tools_count": 16,
+            "tools_count": len(TOOL_REGISTRY),
         }
     )
 
@@ -433,7 +541,7 @@ async def health_check(request):
     from starlette.responses import JSONResponse
 
     return JSONResponse(
-        {"status": "healthy", "service": "Gramps MCP Server", "tools": 16}
+        {"status": "healthy", "service": "Gramps MCP Server", "tools": len(TOOL_REGISTRY)}
     )
 
 

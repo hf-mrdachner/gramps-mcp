@@ -72,6 +72,17 @@ _WRITE_MAP = {
     ApiCalls.POST_MEDIA: "media", ApiCalls.PUT_MEDIA_ITEM: "media",
     ApiCalls.POST_REPOSITORIES: "repository", ApiCalls.PUT_REPOSITORY: "repository",
 }
+_DELETE_MAP = {
+    ApiCalls.DELETE_PERSON: "person",
+    ApiCalls.DELETE_FAMILY: "family",
+    ApiCalls.DELETE_EVENT: "event",
+    ApiCalls.DELETE_PLACE: "place",
+    ApiCalls.DELETE_CITATION: "citation",
+    ApiCalls.DELETE_SOURCE: "source",
+    ApiCalls.DELETE_REPOSITORY: "repository",
+    ApiCalls.DELETE_MEDIA_ITEM: "media",
+    ApiCalls.DELETE_NOTE: "note",
+}
 
 
 class GrampsSqliteClient:
@@ -189,12 +200,22 @@ class GrampsSqliteClient:
             obj_type = _WRITE_MAP[api_call]
             is_put = api_call.name.startswith("PUT_")
             # Strip MCP query params that must not be persisted as object fields.
+            # Note: "name" is intentionally excluded — it is a real data field
+            # on Place objects and must be written through.
             _meta = {"extend", "pagesize", "page", "gramps_id", "gql",
-                     "query", "name", "search"}
+                     "query", "search"}
             body = {k: v for k, v in params.items() if k not in _meta}
             if is_put and handle:
                 body = {**body, "handle": handle}
             return self._db.put(obj_type, body)
+
+        # Delete operations
+        if api_call in _DELETE_MAP:
+            obj_type = _DELETE_MAP[api_call]
+            if not handle:
+                raise GrampsAPIError(f"handle is required for DELETE {obj_type}")
+            self._db.delete(obj_type, handle)
+            return {"handle": handle, "deleted": True}
 
         # Search
         if api_call == ApiCalls.GET_SEARCH:

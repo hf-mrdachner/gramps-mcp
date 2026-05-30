@@ -626,6 +626,28 @@ class GrampsSqliteDB(GrampsXmlDB):
         # No cache to update — next read fetches fresh from SQLite.
         return obj
 
+    def delete(self, obj_type: str, handle: str) -> None:
+        """Delete an object from SQLite by handle."""
+        if self._read_only:
+            raise GrampsAPIError(
+                "Cannot write: database is open in read-only mode."
+            )
+        table = _TABLE.get(obj_type)
+        if table is None:
+            raise GrampsAPIError(f"Unknown object type for delete: {obj_type}")
+        try:
+            with self._conn:
+                cursor = self._conn.execute(
+                    f"DELETE FROM {table} WHERE handle = ?",  # noqa: S608
+                    (handle,),
+                )
+        except sqlite3.Error as exc:
+            raise GrampsAPIError(
+                f"SQLite delete error for {obj_type}/{handle}: {exc}"
+            ) from exc
+        if cursor.rowcount == 0:
+            raise GrampsAPIError(f"No {obj_type} found with handle {handle!r}")
+
     def close(self):
         """Close the SQLite connection."""
         self._conn.close()
