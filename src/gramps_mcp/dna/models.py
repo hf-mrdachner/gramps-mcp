@@ -58,8 +58,8 @@ class DnaMatch:
             persisted.
     """
 
-    match_handle: str
-    shared_cm: float
+    match_handle: str = ""
+    shared_cm: float = 0.0
     largest_segment: Optional[float] = None
     relationship: Optional[str] = None
     side: Optional[str] = None

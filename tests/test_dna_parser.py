@@ -251,8 +251,8 @@ class TestBuildNoteText:
         """DnaMatch with only match_handle and shared_cm=0.0 gives empty header."""
         match = DnaMatch(match_handle="x", shared_cm=0.0)
         text = _build_note_text(match)
-        # No pipe-separated content — header should be empty or just "# "
-        assert text.strip() in ("", "#")
+        # No pipe-separated content — header is empty string (no parts, no prefix)
+        assert text == ""
 
     def test_segments_present_includes_table_header(self):
         """When segments exist the column-header row appears in output."""

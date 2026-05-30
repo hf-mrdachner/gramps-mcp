@@ -40,9 +40,9 @@ def _build_note_text(match: DnaMatch) -> str:
     parts = []
     if match.source:
         parts.append(match.source)
-    if match.shared_cm:
+    if match.shared_cm != 0.0:
         parts.append(f"{match.shared_cm} cM")
-    if match.largest_segment:
+    if match.largest_segment is not None:
         parts.append(f"Largest: {match.largest_segment} cM")
     if match.relationship:
         parts.append(match.relationship)
@@ -54,7 +54,8 @@ def _build_note_text(match: DnaMatch) -> str:
     if not match.segments:
         return header
 
-    lines = [header, "Chromosome\tStart\tEnd\tcM\tSNPs"]
+    lines = [header] if header else []
+    lines.append("Chromosome\tStart\tEnd\tcM\tSNPs")
     for s in match.segments:
         lines.append(f"{s.chromosome}\t{s.start}\t{s.end}\t{s.cm}\t{s.snps or ''}")
     return "\n".join(lines)
@@ -107,6 +108,8 @@ def write_dna_match(
     person_row = conn.execute(
         "SELECT json_data FROM person WHERE handle=?", (person_handle,)
     ).fetchone()
+    if person_row is None:
+        raise ValueError(f"Person handle not found: {person_handle!r}")
     person = json.loads(person_row[0])
     person_ref = {
         "_class": "PersonRef",

@@ -54,12 +54,18 @@ def _parse_header(line: str) -> dict:
     for field in fields:
         if field.startswith("Largest: "):
             value_str = field[len("Largest: ") :].removesuffix(" cM").strip()
-            result["largest_segment"] = float(value_str)
+            try:
+                result["largest_segment"] = float(value_str)
+            except ValueError:
+                continue
         elif field.startswith("Side: "):
             result["side"] = field[len("Side: ") :].strip()
         elif field.endswith(" cM") and "cM" not in field[:-3]:
             # Reason: shared_cm is the only plain "X cM" field without a prefix.
-            result["shared_cm"] = float(field.removesuffix(" cM").strip())
+            try:
+                result["shared_cm"] = float(field.removesuffix(" cM").strip())
+            except ValueError:
+                continue
         else:
             unmatched.append(field)
 
@@ -93,13 +99,16 @@ def _parse_segments(lines: List[str]) -> List[DnaSegment]:
         parts = line.split("\t")
         if len(parts) < 4:
             continue
-        chromosome = parts[0]
-        start = int(parts[1])
-        end = int(parts[2])
-        cm = float(parts[3])
-        snps: Optional[int] = None
-        if len(parts) >= 5 and parts[4].strip():
-            snps = int(parts[4].strip())
+        try:
+            chromosome = parts[0]
+            start = int(parts[1])
+            end = int(parts[2])
+            cm = float(parts[3])
+            snps: Optional[int] = None
+            if len(parts) >= 5 and parts[4].strip():
+                snps = int(parts[4].strip())
+        except ValueError:
+            continue
         segments.append(
             DnaSegment(chromosome=chromosome, start=start, end=end, cm=cm, snps=snps)
         )
