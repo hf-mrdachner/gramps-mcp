@@ -79,7 +79,7 @@ from .tools import (
     open_database_tool,
 )
 from .tools.search_basic import find_type_tool
-from .tools.search_details import get_type_tool
+from .tools.search_details import get_person_tool, get_type_tool
 
 
 # Simple analysis models for tools that use direct dict access
@@ -130,6 +130,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+class GetPersonParams(BaseModel):
+    gramps_id: str = Field(..., description="Gramps person ID (e.g. 'I0001')")
+
+
 # Tool registry - single source of truth for all tools
 TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
     # Search & Retrieval Tools
@@ -153,6 +157,15 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "description": "Get full details for person or family by handle or gramps_id",
         "schema": SimpleGetParams,
         "handler": get_type_tool,
+    },
+    "get_person": {
+        "description": (
+            "Get full person details by gramps_id: name, birth, death, "
+            "parents, siblings, spouse(s), and children with dates. "
+            "Use this to navigate the family tree around a known person."
+        ),
+        "schema": GetPersonParams,
+        "handler": get_person_tool,
     },
     # Data Management Tools
     "create_person": {
