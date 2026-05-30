@@ -80,6 +80,7 @@ from .tools import (
 )
 from .tools.search_basic import find_type_tool
 from .tools.search_details import get_person_tool, get_type_tool
+from .tools.wikitree_export import prepare_biography_tool
 
 
 # Simple analysis models for tools that use direct dict access
@@ -132,6 +133,16 @@ logger = logging.getLogger(__name__)
 
 class GetPersonParams(BaseModel):
     gramps_id: str = Field(..., description="Gramps person ID (e.g. 'I0001')")
+
+
+class PrepareBiographyParams(BaseModel):
+    gramps_id: str = Field(..., description="Gramps person ID (e.g. 'I0001')")
+    flavor: str = Field("wikitree", description="Target platform format: 'wikitree'")
+    language: str = Field("en", description="Output language: 'en'")
+    include_events: Optional[list] = Field(
+        None,
+        description="Event types to include, e.g. ['Birth','Death']. Default: all standard events."
+    )
 
 
 # Tool registry - single source of truth for all tools
@@ -308,6 +319,22 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         ),
         "schema": SplitPersonParams,
         "handler": split_person_tool,
+    },
+    # Export Tools
+    "prepare_biography": {
+        "description": (
+            "Generate export biography markup for a person from their Gramps events and "
+            "citations. flavor='wikitree' produces WikiTree-ready markup with structured "
+            "<ref> citations. Events without citations are flagged {{Unsourced}}. "
+            "SQLite backend only. "
+            "IMPORTANT: Always present the generated biography to the user for review "
+            "and explicit approval before passing it to wikitree_edit_person. "
+            "Check for: factual accuracy (dates, places, names), natural language "
+            "(no repeated full name, correct prepositions), and complete source coverage. "
+            "Never post to WikiTree without user confirmation."
+        ),
+        "schema": PrepareBiographyParams,
+        "handler": prepare_biography_tool,
     },
 }
 
