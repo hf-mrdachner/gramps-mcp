@@ -318,6 +318,43 @@ class TestMergeEventsTool:
         )
         assert "identisch" in _result_text(result)
 
+    @pytest.mark.asyncio
+    async def test_merge_events_with_note_handles_on_event(self, write_client):
+        """Events whose note_list contains plain handle strings must not crash.
+
+        Gramps stores note_list as a list of plain handle strings (not dicts).
+        _merge_unique must handle both str and dict items.
+        Regression test for: 'str' object has no attribute 'get'
+        """
+        conn = write_client._db._conn
+        # Add a note row so the handle is valid
+        note_json = {
+            "_class": "Note", "handle": "h_no_ev_test", "gramps_id": "N9001",
+            "format": 0, "text": {"_class": "StyledText", "string": "Test note", "tags": []},
+            "type": {"_class": "NoteType", "value": 1, "string": "General"},
+            "tag_list": [], "change": 0, "private": False,
+        }
+        conn.execute(
+            "INSERT INTO note (handle, gramps_id, json_data) VALUES (?,?,?)",
+            ("h_no_ev_test", "N9001", json.dumps(note_json))
+        )
+        # Patch E0001's note_list to contain a plain string handle
+        row = conn.execute("SELECT json_data FROM event WHERE gramps_id='E0001'").fetchone()
+        ev = json.loads(row["json_data"])
+        ev["note_list"] = ["h_no_ev_test"]
+        conn.execute(
+            "UPDATE event SET json_data=? WHERE gramps_id='E0001'",
+            (json.dumps(ev),)
+        )
+        conn.commit()
+
+        from gramps_mcp.tools.search_details import merge_events_tool
+        # Should not crash with 'str' object has no attribute 'get'
+        result = await merge_events_tool.__wrapped__(
+            write_client, {"winner_id": "E0001", "loser_id": "E0005", "dry_run": True}
+        )
+        assert "[DRY RUN]" in _result_text(result)
+
 
 # ---------------------------------------------------------------------------
 # merge_citations_tool (dry_run + write, including person citation_list)

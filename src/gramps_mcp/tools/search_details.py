@@ -435,8 +435,11 @@ async def merge_events_tool(client, arguments: Dict) -> List[TextContent]:
 
         def _merge_unique(winner_lst: list, loser_lst: list) -> list:
             """Append loser items not already in winner (by handle/identity)."""
-            existing = {(i.get("ref") or str(i)) for i in winner_lst}
-            return winner_lst + [i for i in loser_lst if (i.get("ref") or str(i)) not in existing]
+            def _key(i):
+                return (i.get("ref") if isinstance(i, dict) else i) or str(i)
+
+            existing = {_key(i) for i in winner_lst}
+            return winner_lst + [i for i in loser_lst if _key(i) not in existing]
 
         # Merge citations, notes, media, attributes from loser (no duplicates)
         merged_cits = winner.get("citation_list", []) + [
