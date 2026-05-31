@@ -72,6 +72,11 @@ No more manual data entry, no context switching between apps, no generic genealo
 - **open_database** - Connect to a database file (auto-detects read/write vs read-only)
 - **close_database** - Release the database lock so Gramps Desktop can open it
 
+#### DNA Match Tools (SQLite backend only)
+- **add_dna_match** — Record a DNA match between two persons (shared cM, relationship, segments)
+- **get_dna_matches** — List all DNA matches for a person with parsed chromosome segments
+- **update_dna_match** — Update an existing DNA match (add/replace segments or summary fields)
+
 ## Installation
 
 ### Requirements

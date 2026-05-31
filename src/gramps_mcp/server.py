@@ -35,9 +35,19 @@ from pydantic import BaseModel, Field
 
 # Import all parameter models
 from .models.parameters.citation_params import CitationData
+from .models.parameters.dna_params import (
+    AddDnaMatchParams,
+    GetDnaMatchesParams,
+    UpdateDnaMatchParams,
+)
 from .models.parameters.event_params import EventSaveParams
 from .models.parameters.family_params import FamilySaveParams
 from .models.parameters.media_params import MediaSaveParams
+from .models.parameters.merge_params import (
+    FindDuplicatesParams,
+    MergePersonsParams,
+    SplitPersonParams,
+)
 from .models.parameters.note_params import NoteSaveParams
 from .models.parameters.people_params import PersonData
 from .models.parameters.place_params import PlaceSaveParams
@@ -49,18 +59,10 @@ from .models.parameters.simple_params import (
 )
 from .models.parameters.source_params import SourceSaveParams
 from .models.parameters.transactions_params import TransactionHistoryParams
-from .models.parameters.merge_params import (
-    FindDuplicatesParams,
-    MergePersonsParams,
-    SplitPersonParams,
-)
 
 # Import all tool functions
 from .tools import (
     close_database_tool,
-    find_duplicate_persons_tool,
-    merge_persons_tool,
-    split_person_tool,
     create_citation_tool,
     create_event_tool,
     create_family_tool,
@@ -71,12 +73,20 @@ from .tools import (
     create_repository_tool,
     create_source_tool,
     find_anything_tool,
+    find_duplicate_persons_tool,
     get_ancestors_tool,
     get_descendants_tool,
     get_recent_changes_tool,
     get_tree_info_tool,
     list_databases_tool,
+    merge_persons_tool,
     open_database_tool,
+    split_person_tool,
+)
+from .tools.dna import (
+    add_dna_match_tool,
+    get_dna_matches_tool,
+    update_dna_match_tool,
 )
 from .tools.search_basic import find_type_tool
 from .tools.search_details import (
@@ -437,8 +447,8 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "split_person": {
         "description": (
             "Undo a previous merge_persons call by recreating the absorbed person. "
-            "Reads the merge backup file. The winner record is not modified automatically. "
-            "SQLite backend only."
+            "Reads the merge backup file. The winner record is not modified "
+            "automatically. SQLite backend only."
         ),
         "schema": SplitPersonParams,
         "handler": split_person_tool,
@@ -458,6 +468,36 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         ),
         "schema": PrepareBiographyParams,
         "handler": prepare_biography_tool,
+    },
+    # DNA tools (SQLite backend only)
+    "add_dna_match": {
+        "description": (
+            "Record a DNA match between two persons. "
+            "Creates a PersonRef with rel='DNA' and a Note in the Gramps DNA "
+            "Segment Map format. Requires both persons to exist. "
+            "SQLite backend only."
+        ),
+        "schema": AddDnaMatchParams,
+        "handler": add_dna_match_tool,
+    },
+    "get_dna_matches": {
+        "description": (
+            "List all DNA matches recorded for a person. "
+            "Returns shared cM, relationship, side, source, and "
+            "chromosome-level segments. SQLite backend only."
+        ),
+        "schema": GetDnaMatchesParams,
+        "handler": get_dna_matches_tool,
+    },
+    "update_dna_match": {
+        "description": (
+            "Update an existing DNA match. "
+            "Merges provided fields into the existing match and replaces the note. "
+            "Use to add or replace chromosome-level segments on a summary-only match. "
+            "SQLite backend only."
+        ),
+        "schema": UpdateDnaMatchParams,
+        "handler": update_dna_match_tool,
     },
 }
 
