@@ -72,6 +72,14 @@ async def format_family_detail(client, tree_id: str, handle: str) -> str:
         dates = ", ".join(filter(None, [mother_birth, mother_death]))
         result += f"Mother: {mother_name} ({mother_gender}) - {mother_id} - {dates}\n"
 
+    # Build child relationship type index from raw child_ref_list
+    child_rel: dict = {}
+    for ref in family_data.get("child_ref_list", []):
+        h = ref.get("ref", "")
+        frel = ref.get("frel", "Birth") or "Birth"
+        mrel = ref.get("mrel", "Birth") or "Birth"
+        child_rel[h] = (frel, mrel)
+
     # Children section
     children = extended.get("children", [])
     if children:
@@ -80,14 +88,32 @@ async def format_family_detail(client, tree_id: str, handle: str) -> str:
             child_name = _extract_person_name(child)
             child_gender = _get_gender_letter(child.get("gender", 2))
             child_id = child.get("gramps_id", "")
+            child_handle = child.get("handle", "")
             child_birth, child_death = await _get_birth_death_dates(
                 client, tree_id, child
             )
             dates = ", ".join(filter(None, [child_birth, child_death]))
-            result += f"- {child_name} ({child_gender}) - {child_id} - {dates}\n"
+            # Show relationship type only when not standard Birth
+            frel, mrel = child_rel.get(child_handle, ("Birth", "Birth"))
+            rel_parts = []
+            if frel not in ("Birth", "None", ""):
+                rel_parts.append(f"Vater: {frel}")
+            if mrel not in ("Birth", "None", "") and mrel != frel:
+                rel_parts.append(f"Mutter: {mrel}")
+            elif mrel not in ("Birth", "None", "") and mrel == frel:
+                rel_parts = [frel]  # both same non-Birth → show once
+            rel_str = f" [{', '.join(rel_parts)}]" if rel_parts else ""
+            result += f"- {child_name} ({child_gender}) - {child_id} - {dates}{rel_str}\n"
 
-    # Marriage information
-    result += "\nMarried:\n"
+    # Family relationship type
+    _fam_rel = {
+        "Married": "Verheiratet", "Unmarried": "Unverheiratet",
+        "Civil Union": "Eingetragene Partnerschaft", "Unknown": "Unbekannt",
+    }
+    rel_type_raw = family_data.get("type", "Married") or "Married"
+    rel_label = _fam_rel.get(rel_type_raw, rel_type_raw)
+    result += f"\n{rel_label}:\n"
+
     event_ref_list = family_data.get("event_ref_list", [])
     for event_ref in event_ref_list:
         event_handle = event_ref.get("ref", "")

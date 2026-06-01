@@ -56,6 +56,20 @@
 - **Comment non-obvious code** and ensure everything is understandable to a mid-level developer.
 - When writing complex logic, **add an inline `# Reason:` comment** explaining the why, not just the what.
 
+### Direktzugriff auf SQLite
+
+Wenn du direkt auf die SQLite-Datenbank zugreifst (sqlite3.connect, JSON-Manipulation),
+überlege immer ob das besser als MCP-Tool implementiert werden sollte.
+
+Direktzugriff ist ok für einmalige Debugging-Operationen. Aber danach fragen:
+Brauchen wir dafür ein Tool? Typische Kandidaten:
+- Löschen von Objekten (delete_person, delete_family, delete_event...)
+- Batch-Operationen die nicht über bestehende Tools gehen
+- Komplexe Abfragen die GQL nicht abbilden kann
+
+Jedes Mal wenn du direkt auf die DB gehst: kurz im Kommentar vermerken warum
+kein MCP-Tool verwendet wurde.
+
 ### AI Behavior Rules
 - **Never assume missing context. Ask questions if uncertain.**
 - **Never hallucinate libraries or functions** – only use known, verified Python packages.

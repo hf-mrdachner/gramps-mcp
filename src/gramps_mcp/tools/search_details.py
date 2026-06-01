@@ -880,6 +880,83 @@ async def merge_families_tool(client, arguments: Dict) -> List[TextContent]:
         return _format_error_response(e, "merge families")
 
 
+@with_client
+async def find_duplicate_events_tool(client, arguments: Dict) -> List[TextContent]:
+    """
+    Find duplicate events per person: same type + same date on the same person.
+    Returns candidate pairs sorted by count. Use merge_events to fix them.
+    """
+    try:
+        from ..models.api_calls import ApiCalls
+        from ..handlers.date_handler import format_date
+
+        settings = get_settings()
+        tree_id = settings.gramps_tree_id
+        max_results = arguments.get("max_results", 50)
+        gramps_id_filter = arguments.get("gramps_id")
+
+        all_persons = await client.make_api_call(
+            ApiCalls.GET_PEOPLE, tree_id=tree_id, params={"pagesize": 99999}
+        )
+
+        if gramps_id_filter:
+            all_persons = [p for p in all_persons if p.get("gramps_id") == gramps_id_filter]
+
+        duplicates = []
+        for person in all_persons:
+            pid = person.get("gramps_id", "")
+            pn = person.get("primary_name", {})
+            given = pn.get("first_name", "")
+            sl = pn.get("surname_list", [])
+            surname = sl[0].get("surname", "") if sl else ""
+            name = f"{given} {surname}".strip()
+
+            erefs = person.get("event_ref_list", [])
+            events_data = []
+            for ref in erefs:
+                eh = ref.get("ref", "") if isinstance(ref, dict) else ref
+                if not eh:
+                    continue
+                try:
+                    ev = await client.make_api_call(
+                        ApiCalls.GET_EVENT, tree_id=tree_id, handle=eh
+                    )
+                    etype = ev.get("type", "?")
+                    date = ev.get("date", {})
+                    dateval = tuple(date.get("dateval", [])) if isinstance(date, dict) else ()
+                    modifier = date.get("modifier", 0) if isinstance(date, dict) else 0
+                    key = (etype, dateval, modifier)
+                    events_data.append((key, etype, ev.get("gramps_id", "?"), eh,
+                                        format_date(date)))
+                except Exception:
+                    continue
+
+            groups: dict = {}
+            for key, etype, eid, eh, date_str in events_data:
+                groups.setdefault(key, []).append((eid, eh, date_str, etype))
+
+            for key, items in groups.items():
+                if len(items) > 1:
+                    duplicates.append((name, pid, items))
+
+        total = sum(len(v) - 1 for _, _, v in duplicates)
+        shown = duplicates[:max_results]
+        lines = [
+            f"Duplikat-Events: {len(duplicates)} Gruppen, {total} überflüssige Events",
+            f"(Zeige {len(shown)} von {len(duplicates)})", "",
+        ]
+        for name, pid, items in shown:
+            etype = items[0][3]
+            date_str = items[0][2]
+            eids = ", ".join(i[0] for i in items)
+            lines.append(f"**{name} ({pid})** — {etype} {date_str}: {eids}")
+
+        return [TextContent(type="text", text="\n".join(lines))]
+
+    except Exception as e:
+        return _format_error_response(e, "find duplicate events")
+
+
 async def get_type_tool(arguments: Dict) -> List[TextContent]:
     """Universal get tool for person and family details."""
     entity_type = arguments.get("type")

@@ -81,6 +81,7 @@ from .tools import (
 from .tools.search_basic import find_type_tool
 from .tools.search_details import (
     find_duplicate_citations_tool,
+    find_duplicate_events_tool,
     get_event_tool, get_person_tool, get_place_tool,
     merge_citations_tool, merge_events_tool, merge_families_tool, merge_places_tool,
     get_type_tool,
@@ -175,6 +176,11 @@ class MergeCitationsParams(BaseModel):
 class FindDuplicateCitationsParams(BaseModel):
     max_results: int = Field(50, description="Maximum number of duplicate groups to show")
     source_filter: Optional[str] = Field(None, description="Filter by source title substring (case-insensitive)")
+
+
+class FindDuplicateEventsParams(BaseModel):
+    max_results: int = Field(50, description="Maximum number of duplicate groups to show", ge=1, le=500)
+    gramps_id: Optional[str] = Field(None, description="Limit scan to one person by Gramps ID (e.g. 'I0001')")
 
 
 class PrepareBiographyParams(BaseModel):
@@ -285,6 +291,15 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         ),
         "schema": FindDuplicateCitationsParams,
         "handler": find_duplicate_citations_tool,
+    },
+    "find_duplicate_events": {
+        "description": (
+            "Find persons who have duplicate events: same type and date recorded more than once. "
+            "Use gramps_id to scan a single person, or omit to scan the whole tree. "
+            "Returns grouped candidates for merge_events."
+        ),
+        "schema": FindDuplicateEventsParams,
+        "handler": find_duplicate_events_tool,
     },
     # Data Management Tools
     "create_person": {
