@@ -238,6 +238,30 @@ class TestPlaceParsing:
         assert len(urls) == 1
         assert "wikipedia" in urls[0]["path"]
 
+    def test_update_name_updates_title(self, sqlite_db):
+        sqlite_db.put("place", {
+            "handle": "h_pl_berlin",
+            "place_type": "City",
+            "name": {"value": "Berlin (neu)", "lang": ""},
+        })
+        place = sqlite_db.get("place", "h_pl_berlin")
+        assert place["name"]["value"] == "Berlin (neu)"
+        assert place["title"].startswith("Berlin (neu)")
+
+    def test_update_name_preserves_class(self, sqlite_db):
+        import json
+        sqlite_db.put("place", {
+            "handle": "h_pl_berlin",
+            "place_type": "City",
+            "name": {"value": "Berlin updated"},
+        })
+        row = sqlite_db._conn.execute(
+            "SELECT json_data FROM place WHERE handle = 'h_pl_berlin'"
+        ).fetchone()
+        raw = json.loads(row[0])
+        assert raw["name"]["_class"] == "PlaceName"
+        assert raw["name"]["value"] == "Berlin updated"
+
 
 # ===========================================================================
 # XML parsing: Source

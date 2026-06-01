@@ -731,6 +731,16 @@ def _merge_into(base: Dict, patch: Dict, obj_type: str) -> None:
             base[gramps_key] = [_denorm_event_ref(e) for e in val]
         elif key == "child_ref_list" and isinstance(val, list):
             base[gramps_key] = [_denorm_child_ref(c) for c in val]
+        elif obj_type == "place" and key == "name" and isinstance(val, dict):
+            base["name"] = {"_class": "PlaceName", **val}
+            new_val = val.get("value", "")
+            if new_val:
+                existing_title = base.get("title", "")
+                if existing_title and "," in existing_title:
+                    suffix = existing_title.split(",", 1)[1]
+                    base["title"] = f"{new_val},{suffix}"
+                else:
+                    base["title"] = new_val
         elif isinstance(val, list):
             base[gramps_key] = val  # plain handle lists: note_list, citation_list, …
         elif val is not None:
