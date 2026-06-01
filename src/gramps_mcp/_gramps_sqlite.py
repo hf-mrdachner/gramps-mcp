@@ -731,6 +731,9 @@ def _merge_into(base: Dict, patch: Dict, obj_type: str) -> None:
             base[gramps_key] = [_denorm_event_ref(e) for e in val]
         elif key == "child_ref_list" and isinstance(val, list):
             base[gramps_key] = [_denorm_child_ref(c) for c in val]
+        elif key == "child_handles" and isinstance(val, list):
+            # FamilySaveParams convenience: flat handle list → child_ref_list
+            base["child_ref_list"] = [_denorm_child_ref({"ref": h}) for h in val]
         elif obj_type == "place" and key == "name" and isinstance(val, dict):
             base["name"] = {"_class": "PlaceName", **val}
             new_val = val.get("value", "")
