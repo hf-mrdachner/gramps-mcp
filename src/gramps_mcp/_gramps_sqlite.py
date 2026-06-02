@@ -237,15 +237,16 @@ def _denorm_date(d: Any) -> Dict:
     Returns:
         Gramps JSON date dict with ``_class`` and ``text`` key.
     """
+    _empty_dateval = [0, 0, 0, False]
     if not isinstance(d, dict):
         return {"_class": "Date", "calendar": 0, "modifier": 0, "quality": 0,
-                "dateval": [], "text": "", "sortval": 0, "newyear": 0, "format": None}
+                "dateval": _empty_dateval, "text": "", "sortval": 0, "newyear": 0, "format": None}
     return {
         "_class": "Date",
         "calendar": d.get("calendar", 0),
         "modifier": d.get("modifier", 0),
         "quality": d.get("quality", 0),
-        "dateval": d.get("dateval", []),
+        "dateval": d.get("dateval") or _empty_dateval,
         "text": d.get("string", ""),
         "sortval": d.get("sortval", 0),
         "newyear": d.get("newyear", 0),
@@ -596,6 +597,16 @@ class GrampsSqliteDB(GrampsXmlDB):
         obj["change"] = int(time.time())
 
         gramps_json = _build_gramps_json(obj_type, obj, existing_raw)
+
+        # Fix A: auto-update birth/death ref indices so they always match event_ref_list
+        if obj_type == "person":
+            birth_idx, death_idx = _compute_birth_death_indices(
+                self._conn, gramps_json.get("event_ref_list", [])
+            )
+            gramps_json["birth_ref_index"] = birth_idx
+            gramps_json["death_ref_index"] = death_idx
+            obj = {**obj, "birth_ref_index": birth_idx, "death_ref_index": death_idx}
+
         json_str = json.dumps(gramps_json, ensure_ascii=False)
 
         try:
@@ -618,6 +629,16 @@ class GrampsSqliteDB(GrampsXmlDB):
                         f"UPDATE {table} SET {set_clause} WHERE handle=?",  # noqa: S608
                         vals,
                     )
+                # Fix B: update parent_family_list of children when family written with child data
+                if obj_type == "family" and (
+                    "child_handles" in obj or "child_ref_list" in obj
+                ):
+                    child_handles = [
+                        cr["ref"]
+                        for cr in gramps_json.get("child_ref_list", [])
+                        if isinstance(cr, dict) and cr.get("ref")
+                    ]
+                    _update_parent_family_list(self._conn, handle, child_handles)
         except sqlite3.Error as exc:
             raise GrampsAPIError(
                 f"SQLite write error for {obj_type}/{handle}: {exc}"
@@ -695,6 +716,81 @@ def _denorm_event_ref(eref: Any) -> Any:
     result.setdefault("attribute_list", [])
     result.setdefault("private", False)
     return result
+
+
+def _compute_birth_death_indices(conn: Any, event_ref_list: List[Dict]) -> Tuple[int, int]:
+    """
+    Scan event_ref_list and return the first Birth (12) and Death (13) indices.
+
+    Queries the event table for each ref handle to determine event type.
+    Returns -1 for types not found.
+
+    Args:
+        conn: Open sqlite3.Connection.
+        event_ref_list: List of EventRef dicts in Gramps JSON format.
+
+    Returns:
+        Tuple (birth_ref_index, death_ref_index).
+    """
+    birth_idx = -1
+    death_idx = -1
+    for i, eref in enumerate(event_ref_list):
+        if not isinstance(eref, dict):
+            continue
+        handle = eref.get("ref")
+        if not handle:
+            continue
+        row = conn.execute(
+            "SELECT json_data FROM event WHERE handle = ?",  # noqa: S608
+            (handle,),
+        ).fetchone()
+        if not row:
+            continue
+        try:
+            event_data = json.loads(row[0])
+        except Exception:
+            continue
+        etype = event_data.get("type", {})
+        val = etype.get("value") if isinstance(etype, dict) else None
+        if val == 12 and birth_idx == -1:
+            birth_idx = i
+        if val == 13 and death_idx == -1:
+            death_idx = i
+    return birth_idx, death_idx
+
+
+def _update_parent_family_list(conn: Any, family_handle: str, child_handles: List[str]) -> None:
+    """
+    Add family_handle to parent_family_list of each child person in the DB.
+
+    Called within the same SQLite transaction as the family write. Only adds;
+    never removes (removal is handled by the remove_child_from_family tool).
+
+    Args:
+        conn: Open sqlite3.Connection within an active transaction.
+        family_handle: The family handle to add to each child's parent_family_list.
+        child_handles: List of child person handles to update.
+    """
+    for child_handle in child_handles:
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?",  # noqa: S608
+            (child_handle,),
+        ).fetchone()
+        if not row:
+            continue
+        try:
+            person_data = json.loads(row[0])
+        except Exception:
+            continue
+        pfl = person_data.get("parent_family_list", [])
+        if family_handle not in pfl:
+            pfl.append(family_handle)
+            person_data["parent_family_list"] = pfl
+            person_data["change"] = int(time.time())
+            conn.execute(
+                "UPDATE person SET json_data = ?, change = ? WHERE handle = ?",  # noqa: S608
+                (json.dumps(person_data, ensure_ascii=False), person_data["change"], child_handle),
+            )
 
 
 def _denorm_child_ref(cref: Any) -> Any:

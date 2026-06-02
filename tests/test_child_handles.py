@@ -27,6 +27,14 @@ CREATE TABLE family (
     father_handle VARCHAR(50), mother_handle VARCHAR(50),
     change INTEGER DEFAULT 0, private INTEGER DEFAULT 0
 );
+CREATE TABLE person (
+    handle VARCHAR(50) PRIMARY KEY NOT NULL,
+    given_name TEXT, surname TEXT,
+    json_data TEXT, gramps_id TEXT, gender INTEGER DEFAULT 2,
+    death_ref_index INTEGER DEFAULT -1,
+    birth_ref_index INTEGER DEFAULT -1,
+    change INTEGER DEFAULT 0, private INTEGER DEFAULT 0
+);
 CREATE TABLE metadata (
     setting VARCHAR(50) PRIMARY KEY NOT NULL,
     json_data TEXT, value BLOB

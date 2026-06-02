@@ -35,6 +35,12 @@ from pydantic import BaseModel, Field
 
 # Import all parameter models
 from .models.parameters.citation_params import CitationData
+from .models.parameters.delete_params import DeleteObjectParams
+from .models.parameters.link_edit_params import (
+    AddEventToPersonParams,
+    MoveAttachmentParams,
+    RemoveChildFromFamilyParams,
+)
 from .models.parameters.dna_params import (
     AddDnaMatchParams,
     GetDnaMatchesParams,
@@ -59,7 +65,6 @@ from .models.parameters.simple_params import (
 )
 from .models.parameters.source_params import SourceSaveParams
 from .models.parameters.transactions_params import TransactionHistoryParams
-from .models.parameters.delete_params import DeleteObjectParams
 
 # Import all tool functions
 from .tools import (
@@ -84,6 +89,12 @@ from .tools import (
     open_database_tool,
     split_person_tool,
 )
+from .tools.delete import delete_object_tool
+from .tools.link_edit import (
+    add_event_to_person_tool,
+    move_attachment_tool,
+    remove_child_from_family_tool,
+)
 from .tools.dna import (
     add_dna_match_tool,
     get_dna_matches_tool,
@@ -96,14 +107,13 @@ from .tools.search_details import (
     get_event_tool,
     get_person_tool,
     get_place_tool,
+    get_type_tool,
     merge_citations_tool,
     merge_events_tool,
     merge_families_tool,
     merge_places_tool,
-    get_type_tool,
 )
 from .tools.wikitree_export import prepare_biography_tool
-from .tools.delete import delete_object_tool
 
 
 # Simple analysis models for tools that use direct dict access
@@ -538,6 +548,51 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
             obj_type=args["obj_type"],
             handle=args["handle"],
             confirmed=args.get("confirmed", False),
+        ),
+    },
+    "add_event_to_person": {
+        "description": (
+            "Append an event reference to a person's event_ref_list without replacing it. "
+            "Automatically updates birth_ref_index and death_ref_index when a Birth or "
+            "Death event is added. Use this instead of create_person when you want to add "
+            "a single event and preserve existing event links. SQLite backend only."
+        ),
+        "schema": AddEventToPersonParams,
+        "handler": lambda args: add_event_to_person_tool(
+            person_handle=args["person_handle"],
+            event_handle=args["event_handle"],
+            role=args.get("role", "Primary"),
+        ),
+    },
+    "remove_child_from_family": {
+        "description": (
+            "Remove a child from a family and clean up the child's parent_family_list. "
+            "Both the family's child_ref_list and the child person's parent_family_list "
+            "are updated in a single transaction. SQLite backend only."
+        ),
+        "schema": RemoveChildFromFamilyParams,
+        "handler": lambda args: remove_child_from_family_tool(
+            family_handle=args["family_handle"],
+            child_handle=args["child_handle"],
+        ),
+    },
+    "move_attachment": {
+        "description": (
+            "Move a note or media reference from one object to another atomically. "
+            "Removes the handle from the source's note_list/media_list and adds it "
+            "to the target's list in a single transaction. Use for correcting GEDCOM "
+            "import errors where notes/media landed on the wrong person. "
+            "Supports person->person and person->family moves. SQLite backend only. "
+            "Supports person and family objects as source and target only."
+        ),
+        "schema": MoveAttachmentParams,
+        "handler": lambda args: move_attachment_tool(
+            attachment_type=args["attachment_type"],
+            handle=args["handle"],
+            from_handle=args["from_handle"],
+            from_type=args.get("from_type", "person"),
+            to_handle=args["to_handle"],
+            to_type=args.get("to_type", "person"),
         ),
     },
 }
