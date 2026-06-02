@@ -61,6 +61,14 @@ class Settings(BaseModel):
         ),
     )
 
+    # Privacy settings
+    gramps_privacy_mode: bool = Field(
+        False,
+        description=(
+            "When True, redact sensitive data for living persons in all tool responses."
+        ),
+    )
+
     @model_validator(mode="after")
     def check_backend_config(self) -> "Settings":
         """
@@ -119,6 +127,7 @@ def get_settings() -> Settings:
             gramps_password=os.environ.get("GRAMPS_PASSWORD"),
             gramps_tree_id=os.environ.get("GRAMPS_TREE_ID", "default"),
             gramps_db_path=os.environ.get("GRAMPS_DB_PATH"),
+            gramps_privacy_mode=os.environ.get("GRAMPS_PRIVACY_MODE", "false").lower() == "true",
         )
     except KeyError as e:
         raise ValueError(f"Missing required environment variable: {e}")

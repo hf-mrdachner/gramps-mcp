@@ -19,6 +19,7 @@ Person detail handler for Gramps MCP operations.
 """
 
 from ..models.api_calls import ApiCalls
+from ..privacy import redact_if_living
 from .date_handler import format_date
 from .place_handler import format_place
 
@@ -29,6 +30,7 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
     person_data = await client.make_api_call(
         ApiCalls.GET_PERSON, tree_id=tree_id, handle=handle, params={"extend": "all"}
     )
+    person_data = await redact_if_living(person_data, client, tree_id)
 
     # Get person timeline
     timeline_data = await client.make_api_call(
@@ -89,7 +91,7 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
             extended = family_data.get("extended", {})
 
             # Father
-            father = extended.get("father", {})
+            father = await redact_if_living(extended.get("father", {}), client, tree_id)
             if father:
                 father_name = _extract_person_name(father)
                 father_id = father.get("gramps_id", "")
@@ -100,7 +102,7 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
                 result += f"- {father_name} - {father_id} - {dates}\n"
 
             # Mother
-            mother = extended.get("mother", {})
+            mother = await redact_if_living(extended.get("mother", {}), client, tree_id)
             if mother:
                 mother_name = _extract_person_name(mother)
                 mother_id = mother.get("gramps_id", "")
@@ -118,6 +120,7 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
             if siblings:
                 result += "Siblings:\n"
                 for sibling in siblings:
+                    sibling = await redact_if_living(sibling, client, tree_id)
                     sibling_name = _extract_person_name(sibling)
                     sibling_id = sibling.get("gramps_id", "")
                     sibling_birth, sibling_death = await _get_birth_death_dates(
@@ -152,6 +155,7 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
                 spouse = mother
 
             if spouse:
+                spouse = await redact_if_living(spouse, client, tree_id)
                 spouse_name = _extract_person_name(spouse)
                 spouse_id = spouse.get("gramps_id", "")
                 spouse_birth, spouse_death = await _get_birth_death_dates(
@@ -165,6 +169,7 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
                 if children:
                     result += "Children:\n"
                     for child in children:
+                        child = await redact_if_living(child, client, tree_id)
                         child_name = _extract_person_name(child)
                         child_id = child.get("gramps_id", "")
                         child_birth, child_death = await _get_birth_death_dates(

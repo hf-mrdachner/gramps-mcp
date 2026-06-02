@@ -23,6 +23,7 @@ Provides clean, direct formatting of person data from handles.
 import logging
 
 from ..models.api_calls import ApiCalls
+from ..privacy import redact_if_living
 from .date_handler import format_date
 from .place_handler import format_place
 
@@ -49,6 +50,7 @@ async def format_person(client, tree_id: str, handle: str) -> str:
             handle=handle,
             params={"extend": "all"},
         )
+        person_data = await redact_if_living(person_data, client, tree_id)
         if not person_data:
             return f"• **Unknown Person** (Handle: {handle})\n  No data available\n\n"
 

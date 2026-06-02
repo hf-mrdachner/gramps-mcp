@@ -19,6 +19,7 @@ Family detail handler for Gramps MCP operations.
 """
 
 from ..models.api_calls import ApiCalls
+from ..privacy import redact_if_living
 from .date_handler import format_date
 from .place_handler import format_place
 
@@ -49,7 +50,7 @@ async def format_family_detail(client, tree_id: str, handle: str) -> str:
     extended = family_data.get("extended", {})
 
     # Father
-    father = extended.get("father", {})
+    father = await redact_if_living(extended.get("father", {}), client, tree_id)
     if father:
         father_name = _extract_person_name(father)
         father_gender = _get_gender_letter(father.get("gender", 2))
@@ -61,7 +62,7 @@ async def format_family_detail(client, tree_id: str, handle: str) -> str:
         result += f"Father: {father_name} ({father_gender}) - {father_id} - {dates}\n"
 
     # Mother
-    mother = extended.get("mother", {})
+    mother = await redact_if_living(extended.get("mother", {}), client, tree_id)
     if mother:
         mother_name = _extract_person_name(mother)
         mother_gender = _get_gender_letter(mother.get("gender", 2))
@@ -85,6 +86,7 @@ async def format_family_detail(client, tree_id: str, handle: str) -> str:
     if children:
         result += "\nCHILDREN:\n"
         for child in children:
+            child = await redact_if_living(child, client, tree_id)
             child_name = _extract_person_name(child)
             child_gender = _get_gender_letter(child.get("gender", 2))
             child_id = child.get("gramps_id", "")
@@ -280,6 +282,7 @@ async def _get_birth_death_dates(client, tree_id: str, person_data: dict) -> tup
             handle=person_handle,
             params={"extend": "all"},
         )
+        full_person_data = await redact_if_living(full_person_data, client, tree_id)
 
         extended = full_person_data.get("extended", {})
         events = extended.get("events", [])
