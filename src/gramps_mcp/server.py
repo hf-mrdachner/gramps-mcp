@@ -59,6 +59,7 @@ from .models.parameters.simple_params import (
 )
 from .models.parameters.source_params import SourceSaveParams
 from .models.parameters.transactions_params import TransactionHistoryParams
+from .models.parameters.delete_params import DeleteObjectParams
 
 # Import all tool functions
 from .tools import (
@@ -92,11 +93,17 @@ from .tools.search_basic import find_type_tool
 from .tools.search_details import (
     find_duplicate_citations_tool,
     find_duplicate_events_tool,
-    get_event_tool, get_person_tool, get_place_tool,
-    merge_citations_tool, merge_events_tool, merge_families_tool, merge_places_tool,
+    get_event_tool,
+    get_person_tool,
+    get_place_tool,
+    merge_citations_tool,
+    merge_events_tool,
+    merge_families_tool,
+    merge_places_tool,
     get_type_tool,
 )
 from .tools.wikitree_export import prepare_biography_tool
+from .tools.delete import delete_object_tool
 
 
 # Simple analysis models for tools that use direct dict access
@@ -162,35 +169,54 @@ class GetPlaceParams(BaseModel):
 class MergePlacesParams(BaseModel):
     winner_id: str = Field(..., description="Gramps place ID to keep (e.g. 'P0001')")
     loser_id: str = Field(..., description="Gramps place ID to absorb into winner")
-    dry_run: bool = Field(True, description="If True (default), show planned changes without writing")
+    dry_run: bool = Field(
+        True, description="If True (default), show planned changes without writing"
+    )
 
 
 class MergeFamiliesParams(BaseModel):
     winner_id: str = Field(..., description="Gramps family ID to keep (e.g. 'F0001')")
     loser_id: str = Field(..., description="Gramps family ID to absorb into winner")
-    dry_run: bool = Field(True, description="If True (default), show planned changes without writing")
+    dry_run: bool = Field(
+        True, description="If True (default), show planned changes without writing"
+    )
 
 
 class MergeEventsParams(BaseModel):
     winner_id: str = Field(..., description="Gramps event ID to keep (e.g. 'E0001')")
-    loser_id: str = Field(..., description="Gramps event ID to absorb; its citations are transferred to winner")
-    dry_run: bool = Field(True, description="If True (default), show planned changes without writing")
+    loser_id: str = Field(
+        ...,
+        description="Gramps event ID to absorb; its citations are transferred to winner",
+    )
+    dry_run: bool = Field(
+        True, description="If True (default), show planned changes without writing"
+    )
 
 
 class MergeCitationsParams(BaseModel):
     winner_id: str = Field(..., description="Gramps citation ID to keep (e.g. 'C0001')")
     loser_id: str = Field(..., description="Gramps citation ID to absorb into winner")
-    dry_run: bool = Field(True, description="If True (default), show planned changes without writing")
+    dry_run: bool = Field(
+        True, description="If True (default), show planned changes without writing"
+    )
 
 
 class FindDuplicateCitationsParams(BaseModel):
-    max_results: int = Field(50, description="Maximum number of duplicate groups to show")
-    source_filter: Optional[str] = Field(None, description="Filter by source title substring (case-insensitive)")
+    max_results: int = Field(
+        50, description="Maximum number of duplicate groups to show"
+    )
+    source_filter: Optional[str] = Field(
+        None, description="Filter by source title substring (case-insensitive)"
+    )
 
 
 class FindDuplicateEventsParams(BaseModel):
-    max_results: int = Field(50, description="Maximum number of duplicate groups to show", ge=1, le=500)
-    gramps_id: Optional[str] = Field(None, description="Limit scan to one person by Gramps ID (e.g. 'I0001')")
+    max_results: int = Field(
+        50, description="Maximum number of duplicate groups to show", ge=1, le=500
+    )
+    gramps_id: Optional[str] = Field(
+        None, description="Limit scan to one person by Gramps ID (e.g. 'I0001')"
+    )
 
 
 class PrepareBiographyParams(BaseModel):
@@ -199,7 +225,7 @@ class PrepareBiographyParams(BaseModel):
     language: str = Field("en", description="Output language: 'en'")
     include_events: Optional[list] = Field(
         None,
-        description="Event types to include, e.g. ['Birth','Death']. Default: all standard events."
+        description="Event types to include, e.g. ['Birth','Death']. Default: all standard events.",
     )
 
 
@@ -499,6 +525,21 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "schema": UpdateDnaMatchParams,
         "handler": update_dna_match_tool,
     },
+    "delete_object": {
+        "description": (
+            "Delete a Gramps object and cascade-clean all references. "
+            "Use confirmed=False first to see a dry-run summary of what "
+            "will be deleted, then call again with confirmed=True to execute. "
+            "Orphaned events (owned exclusively by the deleted person/family) "
+            "are automatically deleted. SQLite backend only."
+        ),
+        "schema": DeleteObjectParams,
+        "handler": lambda args: delete_object_tool(
+            obj_type=args["obj_type"],
+            handle=args["handle"],
+            confirmed=args.get("confirmed", False),
+        ),
+    },
 }
 
 
@@ -596,7 +637,11 @@ async def health_check(request):
     from starlette.responses import JSONResponse
 
     return JSONResponse(
-        {"status": "healthy", "service": "Gramps MCP Server", "tools": len(TOOL_REGISTRY)}
+        {
+            "status": "healthy",
+            "service": "Gramps MCP Server",
+            "tools": len(TOOL_REGISTRY),
+        }
     )
 
 
