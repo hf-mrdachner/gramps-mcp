@@ -27,7 +27,7 @@ API calls supported in this category:
 
 from typing import Any, Dict, Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .base_params import BaseDataModel, BaseGetMultipleParams
 
@@ -53,4 +53,17 @@ class CitationData(BaseDataModel):
         ),
     )
     page: Optional[str] = Field(None, description="Page or location within the source")
-    source_handle: str = Field(..., description="Handle of the source being cited")
+    source_handle: Optional[str] = Field(
+        None,
+        description="Internal handle of the source. Use source_gramps_id instead if you know the Gramps ID (e.g. 'S1743506711').",
+    )
+    source_gramps_id: Optional[str] = Field(
+        None,
+        description="Gramps ID of the source (e.g. 'S1743506711'). Alternative to source_handle — the tool resolves the handle automatically.",
+    )
+
+    @model_validator(mode="after")
+    def require_source_ref(self) -> "CitationData":
+        if not self.source_handle and not self.source_gramps_id:
+            raise ValueError("Either source_handle or source_gramps_id must be provided")
+        return self

@@ -27,6 +27,7 @@ from typing import Dict, List
 from mcp.types import TextContent
 
 from ..client import GrampsAPIError, GrampsWebAPIClient, get_client
+from ..sqlite_client import GrampsSqliteClient
 from ..config import get_settings
 from ..handlers.citation_handler import format_citation
 from ..handlers.event_handler import format_event
@@ -276,6 +277,21 @@ async def create_citation_tool(arguments: Dict) -> List[TextContent]:
     """
     Create or update citation including object associations.
     """
+    if arguments.get("source_gramps_id") and not arguments.get("source_handle"):
+        client = get_client()
+        if not isinstance(client, GrampsSqliteClient):
+            return [TextContent(
+                type="text",
+                text="source_gramps_id lookup requires SQLite backend; provide source_handle instead",
+            )]
+        # Reason: no MCP API for source-by-gramps_id lookup; GrampsSqliteDB.get_by_id is the right layer
+        source = client._db.get_by_id("source", arguments["source_gramps_id"])
+        if not source:
+            return [TextContent(
+                type="text",
+                text=f"Source '{arguments['source_gramps_id']}' not found in database",
+            )]
+        arguments = {**arguments, "source_handle": source["handle"]}
     return await _handle_crud_operation(
         arguments,
         "citation",
