@@ -37,10 +37,26 @@ class FamilySaveParams(BaseModel):
     handle: Optional[str] = Field(
         None, description="Family's handle (for updates; omit for new family)"
     )
+    gramps_id: Optional[str] = Field(
+        None,
+        description="Family's Gramps ID for updates (e.g. 'F0001'). Alternative to handle.",
+    )
     father_handle: Optional[str] = Field(None, description="Father's handle")
+    father_gramps_id: Optional[str] = Field(
+        None,
+        description="Father's Gramps ID (e.g. 'I0001'). Alternative to father_handle.",
+    )
     mother_handle: Optional[str] = Field(None, description="Mother's handle")
+    mother_gramps_id: Optional[str] = Field(
+        None,
+        description="Mother's Gramps ID (e.g. 'I0002'). Alternative to mother_handle.",
+    )
     child_handles: Optional[List[str]] = Field(
         None, description="List of child handles"
+    )
+    child_gramps_ids: Optional[List[str]] = Field(
+        None,
+        description="List of child Gramps IDs (e.g. ['I0003']). Alternative to child_handles.",
     )
     event_ref_list: Optional[List[dict]] = Field(
         None, description="List of event references"
@@ -57,7 +73,12 @@ class FamilySaveParams(BaseModel):
 class FamilyTimelineParams(BaseModel):
     """Parameters for getting family timeline information."""
 
-    handle: str = Field(min_length=8, description="The unique identifier for a family")
+    handle: Optional[str] = Field(
+        None, description="The unique identifier for a family"
+    )
+    gramps_id: Optional[str] = Field(
+        None, description="Family Gramps ID (e.g. 'F0001'). Alternative to handle."
+    )
     dates: Optional[str] = Field(None, description="Date range to bound the timeline")
     events: Optional[str] = Field(
         None, description="Comma delimited list of specific events"

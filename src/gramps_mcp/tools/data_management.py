@@ -27,7 +27,6 @@ from typing import Dict, List
 from mcp.types import TextContent
 
 from ..client import GrampsAPIError, GrampsWebAPIClient, get_client
-from ..sqlite_client import GrampsSqliteClient
 from ..config import get_settings
 from ..handlers.citation_handler import format_citation
 from ..handlers.event_handler import format_event
@@ -199,7 +198,26 @@ async def create_person_tool(arguments: Dict) -> List[TextContent]:
 async def create_family_tool(arguments: Dict) -> List[TextContent]:
     """
     Create or update family unit including member relationships.
+
+    Accepts father_gramps_id, mother_gramps_id, child_gramps_ids in addition
+    to the corresponding handle fields — resolved automatically via resolve_handles.
     """
+    from ..gramps_id import resolve_handles
+
+    client = get_client()
+    try:
+        arguments = await resolve_handles(
+            arguments,
+            {
+                "handle": "family",
+                "father_handle": "person",
+                "mother_handle": "person",
+                "child_handles": "person",
+            },
+            client,
+        )
+    finally:
+        await client.close()
     try:
         # Validate parameters
         params = FamilySaveParams(**arguments)
@@ -276,22 +294,19 @@ async def create_source_tool(arguments: Dict) -> List[TextContent]:
 async def create_citation_tool(arguments: Dict) -> List[TextContent]:
     """
     Create or update citation including object associations.
+
+    Accepts source_gramps_id (e.g. 'S0001') in addition to source_handle —
+    resolved automatically via resolve_handles.
     """
-    if arguments.get("source_gramps_id") and not arguments.get("source_handle"):
-        client = get_client()
-        if not isinstance(client, GrampsSqliteClient):
-            return [TextContent(
-                type="text",
-                text="source_gramps_id lookup requires SQLite backend; provide source_handle instead",
-            )]
-        # Reason: no MCP API for source-by-gramps_id lookup; GrampsSqliteDB.get_by_id is the right layer
-        source = client._db.get_by_id("source", arguments["source_gramps_id"])
-        if not source:
-            return [TextContent(
-                type="text",
-                text=f"Source '{arguments['source_gramps_id']}' not found in database",
-            )]
-        arguments = {**arguments, "source_handle": source["handle"]}
+    from ..gramps_id import resolve_handles
+
+    client = get_client()
+    try:
+        arguments = await resolve_handles(
+            arguments, {"source_handle": "source"}, client
+        )
+    finally:
+        await client.close()
     return await _handle_crud_operation(
         arguments,
         "citation",

@@ -11,8 +11,11 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Tuple
 
+from mcp.types import TextContent
+
 from gramps_mcp._gramps_sqlite import _TABLE, _TYPE_MAPS
 from gramps_mcp.client import GrampsAPIError
+from .search_basic import with_client
 
 # ---------------------------------------------------------------------------
 # EventType int → display string (for labels)
@@ -441,14 +444,14 @@ def _execute_cascade(conn: Any, plan: CascadeResult) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def delete_object_tool(
+async def _delete_object_core(
     obj_type: str,
     handle: str,
     confirmed: bool,
     db: Any = None,
 ) -> str:
     """
-    Delete a Gramps object with cascade cleanup.
+    Core implementation of delete_object — operates directly on a GrampsSqliteDB.
 
     When confirmed=False returns a dry-run summary without touching the DB.
     When confirmed=True executes the deletion in a single transaction.
@@ -521,3 +524,67 @@ async def delete_object_tool(
         },
         ensure_ascii=False,
     )
+
+
+@with_client
+async def delete_object_tool(
+    client,
+    arguments: Dict,
+) -> List[TextContent]:
+    """
+    Delete a Gramps object with cascade cleanup.
+
+    Accepts gramps_id (e.g. 'I0001') in addition to handle — gramps_id is
+    resolved to a handle automatically via resolve_handles.
+
+    When confirmed=False returns a dry-run summary without touching the DB.
+    When confirmed=True executes the deletion in a single transaction.
+    SQLite backend only.
+
+    Args:
+        client: GrampsWebAPIClient instance (injected by @with_client).
+        arguments: Dict with obj_type, handle or gramps_id, and confirmed.
+
+    Returns:
+        List[TextContent] with JSON summary of the operation.
+
+    Raises:
+        GrampsAPIError: On unknown type, missing handle/gramps_id, or write error.
+    """
+    try:
+        from ..gramps_id import resolve_handles
+
+        obj_type = arguments.get("obj_type", "person")
+        arguments = await resolve_handles(
+            arguments, {"handle": obj_type}, client
+        )
+
+        obj_type = arguments.get("obj_type")
+        handle = arguments.get("handle")
+        confirmed = arguments.get("confirmed", False)
+
+        if not obj_type:
+            raise GrampsAPIError("obj_type is required")
+        if not handle:
+            raise GrampsAPIError(
+                "handle or gramps_id is required"
+            )
+
+        from gramps_mcp.sqlite_client import GrampsSqliteClient
+
+        if not isinstance(client, GrampsSqliteClient):
+            raise GrampsAPIError(
+                "delete_object is SQLite-only; Web backend not yet supported"
+            )
+
+        result_json = await _delete_object_core(
+            obj_type=obj_type,
+            handle=handle,
+            confirmed=confirmed,
+            db=client._db,
+        )
+        return [TextContent(type="text", text=result_json)]
+    except GrampsAPIError as exc:
+        return [TextContent(type="text", text=f"Error: {exc}")]
+    except Exception as exc:
+        return [TextContent(type="text", text=f"Unexpected error: {exc}")]

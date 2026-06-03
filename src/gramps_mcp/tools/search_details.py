@@ -53,31 +53,18 @@ def _format_error_response(error: Exception, operation: str) -> List[TextContent
 async def get_person_tool(client, arguments: Dict) -> List[TextContent]:
     """
     Get comprehensive person information including parents, siblings, spouse and children.
-    Accepts gramps_id (e.g. 'I0001') or person_handle.
+    Accepts handle or gramps_id (e.g. 'I0001').
     """
     try:
-        handle = arguments.get("person_handle") or arguments.get("handle")
-        gramps_id = arguments.get("gramps_id")
-
+        from ..gramps_id import resolve_handles
+        arguments = await resolve_handles(arguments, {"handle": "person"}, client)
+        handle = arguments.get("handle") or arguments.get("person_handle")
+        if not handle:
+            raise ValueError("handle or gramps_id is required")
         settings = get_settings()
         tree_id = settings.gramps_tree_id
-
-        # Resolve gramps_id to handle if needed
-        if not handle and gramps_id:
-            people = await client.make_api_call(
-                ApiCalls.GET_PEOPLE, tree_id=tree_id,
-                params={"gramps_id": gramps_id, "pagesize": 1},
-            )
-            if not people:
-                return [TextContent(type="text", text=f"Person {gramps_id} not found")]
-            handle = people[0].get("handle", "")
-
-        if not handle:
-            raise ValueError("gramps_id or person_handle required")
-
         formatted_person = await format_person_detail(client, tree_id, handle)
         return [TextContent(type="text", text=formatted_person)]
-
     except Exception as e:
         return _format_error_response(e, "person details retrieval")
 
@@ -85,23 +72,19 @@ async def get_person_tool(client, arguments: Dict) -> List[TextContent]:
 @with_client
 async def get_family_tool(client, arguments: Dict) -> List[TextContent]:
     """
-    Get detailed family information using direct API calls.
+    Get detailed family information.
+    Accepts family_handle, handle, or gramps_id (e.g. 'F0001').
     """
     try:
-        # Extract handle from arguments
-        handle = arguments.get("family_handle")
+        from ..gramps_id import resolve_handles
+        arguments = await resolve_handles(arguments, {"handle": "family"}, client)
+        handle = arguments.get("handle") or arguments.get("family_handle")
         if not handle:
-            raise ValueError("family_handle is required")
-
-        # Get tree_id from settings
+            raise ValueError("handle or gramps_id is required")
         settings = get_settings()
         tree_id = settings.gramps_tree_id
-
-        # Use the detailed family handler to get comprehensive formatted data
         formatted_family = await format_family_detail(client, tree_id, handle)
-
         return [TextContent(type="text", text=formatted_family)]
-
     except Exception as e:
         return _format_error_response(e, "family details retrieval")
 
@@ -113,23 +96,17 @@ async def get_event_tool(client, arguments: Dict) -> List[TextContent]:
     Scans all persons in the database — fact-based, no guessing.
     """
     try:
-        gramps_id = arguments.get("gramps_id")
-        if not gramps_id:
-            raise ValueError("gramps_id is required")
-
+        from ..gramps_id import resolve_handles
+        arguments = await resolve_handles(arguments, {"handle": "event"}, client)
+        handle = arguments.get("handle")
         settings = get_settings()
         tree_id = settings.gramps_tree_id
-
-        # Resolve event by gramps_id
-        events = await client.make_api_call(
-            ApiCalls.GET_EVENTS, tree_id=tree_id,
-            params={"gramps_id": gramps_id, "pagesize": 1},
-        )
-        if not events:
-            return [TextContent(type="text", text=f"Event {gramps_id} not found")]
-
-        event = events[0]
-        handle = event.get("handle", "")
+        if not handle:
+            raise ValueError("handle or gramps_id is required")
+        event = await client.make_api_call(ApiCalls.GET_EVENT, tree_id=tree_id, handle=handle)
+        if not event:
+            return [TextContent(type="text", text=f"Event {handle} not found")]
+        gramps_id = event.get("gramps_id", handle)
 
         # Format event details
         event_type = event.get("type", "Unknown")
@@ -195,23 +172,17 @@ async def get_place_tool(client, arguments: Dict) -> List[TextContent]:
     Scans all events — fact-based, no guessing.
     """
     try:
-        gramps_id = arguments.get("gramps_id")
-        if not gramps_id:
-            raise ValueError("gramps_id is required")
-
+        from ..gramps_id import resolve_handles
+        arguments = await resolve_handles(arguments, {"handle": "place"}, client)
+        handle = arguments.get("handle")
         settings = get_settings()
         tree_id = settings.gramps_tree_id
-
-        # Resolve place by gramps_id
-        places = await client.make_api_call(
-            ApiCalls.GET_PLACES, tree_id=tree_id,
-            params={"gramps_id": gramps_id, "pagesize": 1},
-        )
-        if not places:
-            return [TextContent(type="text", text=f"Place {gramps_id} not found")]
-
-        place = places[0]
-        handle = place.get("handle", "")
+        if not handle:
+            raise ValueError("handle or gramps_id is required")
+        place = await client.make_api_call(ApiCalls.GET_PLACE, tree_id=tree_id, handle=handle)
+        if not place:
+            return [TextContent(type="text", text=f"Place {handle} not found")]
+        gramps_id = place.get("gramps_id", handle)
         name = place.get("name", {}).get("value", "") or gramps_id
         place_type = place.get("type", "")
         lat = place.get("lat", "")

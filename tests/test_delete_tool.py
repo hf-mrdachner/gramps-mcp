@@ -626,7 +626,7 @@ class TestDeleteObjectTool:
         return db, conn
 
     def test_dry_run_returns_would_delete(self):
-        from gramps_mcp.tools.delete import delete_object_tool
+        from gramps_mcp.tools.delete import _delete_object_core as delete_object_tool
         import asyncio
 
         db, conn = self._make_db()
@@ -640,7 +640,7 @@ class TestDeleteObjectTool:
         assert "h_john" in handles
 
     def test_dry_run_does_not_delete(self):
-        from gramps_mcp.tools.delete import delete_object_tool
+        from gramps_mcp.tools.delete import _delete_object_core as delete_object_tool
         import asyncio
 
         db, conn = self._make_db()
@@ -649,7 +649,7 @@ class TestDeleteObjectTool:
         assert row is not None
 
     def test_confirmed_deletes_person(self):
-        from gramps_mcp.tools.delete import delete_object_tool
+        from gramps_mcp.tools.delete import _delete_object_core as delete_object_tool
         import asyncio
 
         db, conn = self._make_db()
@@ -662,7 +662,7 @@ class TestDeleteObjectTool:
         assert row is None
 
     def test_unknown_handle_raises(self):
-        from gramps_mcp.tools.delete import delete_object_tool
+        from gramps_mcp.tools.delete import _delete_object_core as delete_object_tool
         from gramps_mcp.client import GrampsAPIError
         import asyncio
 

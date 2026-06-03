@@ -114,6 +114,8 @@ from .tools.search_details import (
     merge_places_tool,
 )
 from .tools.wikitree_export import prepare_biography_tool
+from .client import get_client
+from .gramps_id import resolve_handles
 
 
 # Simple analysis models for tools that use direct dict access
@@ -236,6 +238,50 @@ class PrepareBiographyParams(BaseModel):
     include_events: Optional[list] = Field(
         None,
         description="Event types to include, e.g. ['Birth','Death']. Default: all standard events.",
+    )
+
+
+async def _handle_add_event_to_person(args: Dict) -> Any:
+    """Handler for add_event_to_person with gramps_id resolution."""
+    args = await resolve_handles(
+        args, {"person_handle": "person", "event_handle": "event"}, get_client()
+    )
+    return await add_event_to_person_tool(
+        person_handle=args["person_handle"],
+        event_handle=args["event_handle"],
+        role=args.get("role", "Primary"),
+    )
+
+
+async def _handle_remove_child_from_family(args: Dict) -> Any:
+    """Handler for remove_child_from_family with gramps_id resolution."""
+    args = await resolve_handles(
+        args, {"family_handle": "family", "child_handle": "person"}, get_client()
+    )
+    return await remove_child_from_family_tool(
+        family_handle=args["family_handle"],
+        child_handle=args["child_handle"],
+    )
+
+
+async def _handle_move_attachment(args: Dict) -> Any:
+    """Handler for move_attachment with gramps_id resolution."""
+    args = await resolve_handles(
+        args,
+        {
+            "handle": args.get("attachment_type", "note"),
+            "from_handle": args.get("from_type", "person"),
+            "to_handle": args.get("to_type", "person"),
+        },
+        get_client(),
+    )
+    return await move_attachment_tool(
+        attachment_type=args["attachment_type"],
+        handle=args["handle"],
+        from_handle=args["from_handle"],
+        from_type=args.get("from_type", "person"),
+        to_handle=args["to_handle"],
+        to_type=args.get("to_type", "person"),
     )
 
 
@@ -544,11 +590,7 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
             "are automatically deleted. SQLite backend only."
         ),
         "schema": DeleteObjectParams,
-        "handler": lambda args: delete_object_tool(
-            obj_type=args["obj_type"],
-            handle=args["handle"],
-            confirmed=args.get("confirmed", False),
-        ),
+        "handler": delete_object_tool,
     },
     "add_event_to_person": {
         "description": (
@@ -558,11 +600,7 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
             "a single event and preserve existing event links. SQLite backend only."
         ),
         "schema": AddEventToPersonParams,
-        "handler": lambda args: add_event_to_person_tool(
-            person_handle=args["person_handle"],
-            event_handle=args["event_handle"],
-            role=args.get("role", "Primary"),
-        ),
+        "handler": _handle_add_event_to_person,
     },
     "remove_child_from_family": {
         "description": (
@@ -571,10 +609,7 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
             "are updated in a single transaction. SQLite backend only."
         ),
         "schema": RemoveChildFromFamilyParams,
-        "handler": lambda args: remove_child_from_family_tool(
-            family_handle=args["family_handle"],
-            child_handle=args["child_handle"],
-        ),
+        "handler": _handle_remove_child_from_family,
     },
     "move_attachment": {
         "description": (
@@ -586,14 +621,7 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
             "Supports person and family objects as source and target only."
         ),
         "schema": MoveAttachmentParams,
-        "handler": lambda args: move_attachment_tool(
-            attachment_type=args["attachment_type"],
-            handle=args["handle"],
-            from_handle=args["from_handle"],
-            from_type=args.get("from_type", "person"),
-            to_handle=args["to_handle"],
-            to_type=args.get("to_type", "person"),
-        ),
+        "handler": _handle_move_attachment,
     },
 }
 
