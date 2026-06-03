@@ -11,6 +11,8 @@ import json
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from mcp.types import TextContent
+
 from gramps_mcp._gramps_sqlite import GrampsSqliteDB, _compute_birth_death_indices, _denorm_type
 from gramps_mcp.client import GrampsAPIError
 
@@ -122,7 +124,7 @@ async def add_event_to_person_tool(
     event_handle: str,
     role: str = "Primary",
     db: Any = None,
-) -> str:
+) -> List[TextContent]:
     """
     Append an event reference to a person's event_ref_list without replacing it.
 
@@ -136,8 +138,8 @@ async def add_event_to_person_tool(
         db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
 
     Returns:
-        JSON string with result, person_handle, event_handle, event_ref_count,
-        birth_ref_index, death_ref_index.
+        List[TextContent] with JSON result, person_handle, event_handle,
+        event_ref_count, birth_ref_index, death_ref_index.
 
     Raises:
         GrampsAPIError: If backend is not SQLite or handles not found.
@@ -159,13 +161,13 @@ async def add_event_to_person_tool(
         e.get("ref") for e in event_ref_list if isinstance(e, dict)
     ]
     if event_handle in existing_handles:
-        return json.dumps(
+        return [TextContent(type="text", text=json.dumps(
             {
                 "result": "no_change",
                 "message": f"Event '{event_handle}' is already linked to this person.",
             },
             ensure_ascii=False,
-        )
+        ))]
 
     new_ref = {
         "_class": "EventRef",
@@ -181,7 +183,7 @@ async def add_event_to_person_tool(
     with conn:
         _write_person(conn, person_handle, person_data)
 
-    return json.dumps(
+    return [TextContent(type="text", text=json.dumps(
         {
             "result": "ok",
             "person_handle": person_handle,
@@ -192,7 +194,7 @@ async def add_event_to_person_tool(
             "death_ref_index": person_data.get("death_ref_index", -1),
         },
         ensure_ascii=False,
-    )
+    ))]
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +206,7 @@ async def remove_child_from_family_tool(
     family_handle: str,
     child_handle: str,
     db: Any = None,
-) -> str:
+) -> List[TextContent]:
     """
     Remove a child from a family and clean up the child's parent_family_list.
 
@@ -218,7 +220,8 @@ async def remove_child_from_family_tool(
         db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
 
     Returns:
-        JSON string with result, family_handle, child_handle, remaining_children.
+        List[TextContent] with JSON result, family_handle, child_handle,
+        remaining_children.
 
     Raises:
         GrampsAPIError: If backend is not SQLite, handles not found, or child
@@ -249,7 +252,7 @@ async def remove_child_from_family_tool(
         _write_object(conn, "family", family_handle, family_data)
         _write_person(conn, child_handle, child_data)
 
-    return json.dumps(
+    return [TextContent(type="text", text=json.dumps(
         {
             "result": "ok",
             "family_handle": family_handle,
@@ -257,7 +260,7 @@ async def remove_child_from_family_tool(
             "remaining_children": len(new_child_refs),
         },
         ensure_ascii=False,
-    )
+    ))]
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +276,7 @@ async def move_attachment_tool(
     to_handle: str = "",
     to_type: str = "person",
     db: Any = None,
-) -> str:
+) -> List[TextContent]:
     """
     Atomically move a note or media reference from one object to another.
 
@@ -290,7 +293,7 @@ async def move_attachment_tool(
         db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
 
     Returns:
-        JSON string with result and move details.
+        List[TextContent] with JSON result and move details.
 
     Raises:
         GrampsAPIError: If backend is not SQLite, handles not found, or
@@ -366,7 +369,7 @@ async def move_attachment_tool(
         else:
             _write_object(conn, "family", to_handle, to_data)
 
-    return json.dumps(
+    return [TextContent(type="text", text=json.dumps(
         {
             "result": "ok",
             "attachment_type": attachment_type,
@@ -375,4 +378,4 @@ async def move_attachment_tool(
             "to": {"type": to_type, "handle": to_handle},
         },
         ensure_ascii=False,
-    )
+    ))]

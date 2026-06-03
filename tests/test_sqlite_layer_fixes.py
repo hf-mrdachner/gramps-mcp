@@ -252,3 +252,104 @@ class TestParentFamilyListAutoUpdate:
         ).fetchone()
         child_data = json.loads(row["json_data"])
         assert family_handle not in child_data.get("parent_family_list", [])
+
+
+# ===========================================================================
+# Fix C — family_list of father/mother  (implementation in _gramps_sqlite.py)
+# ===========================================================================
+
+class TestFamilyListAutoUpdate:
+    def test_family_list_updated_for_father_when_family_written(self, fresh_db):
+        db, conn = fresh_db
+        father = db.put("person", {"given_name": "John", "surname": "Smith"})
+        father_handle = father["handle"]
+
+        family = db.put("family", {"father_handle": father_handle})
+        family_handle = family["handle"]
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (father_handle,)
+        ).fetchone()
+        father_data = json.loads(row["json_data"])
+        assert family_handle in father_data.get("family_list", [])
+
+    def test_family_list_updated_for_mother_when_family_written(self, fresh_db):
+        db, conn = fresh_db
+        mother = db.put("person", {"given_name": "Jane", "surname": "Doe"})
+        mother_handle = mother["handle"]
+
+        family = db.put("family", {"mother_handle": mother_handle})
+        family_handle = family["handle"]
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (mother_handle,)
+        ).fetchone()
+        mother_data = json.loads(row["json_data"])
+        assert family_handle in mother_data.get("family_list", [])
+
+    def test_family_list_updated_for_both_parents(self, fresh_db):
+        db, conn = fresh_db
+        father = db.put("person", {"given_name": "John", "surname": "Smith"})
+        mother = db.put("person", {"given_name": "Jane", "surname": "Doe"})
+        father_handle = father["handle"]
+        mother_handle = mother["handle"]
+
+        family = db.put("family", {
+            "father_handle": father_handle,
+            "mother_handle": mother_handle,
+        })
+        family_handle = family["handle"]
+
+        father_row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (father_handle,)
+        ).fetchone()
+        mother_row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (mother_handle,)
+        ).fetchone()
+        father_data = json.loads(father_row["json_data"])
+        mother_data = json.loads(mother_row["json_data"])
+        assert family_handle in father_data.get("family_list", [])
+        assert family_handle in mother_data.get("family_list", [])
+
+    def test_family_list_not_duplicated_on_double_write(self, fresh_db):
+        db, conn = fresh_db
+        father = db.put("person", {"given_name": "John", "surname": "Smith"})
+        father_handle = father["handle"]
+
+        family = db.put("family", {"father_handle": father_handle})
+        family_handle = family["handle"]
+
+        # Write again — must not duplicate
+        db.put("family", {"handle": family_handle, "father_handle": father_handle})
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (father_handle,)
+        ).fetchone()
+        father_data = json.loads(row["json_data"])
+        fl = father_data.get("family_list", [])
+        assert fl.count(family_handle) == 1
+
+    def test_change_timestamp_bumped_for_parent(self, fresh_db):
+        db, conn = fresh_db
+        father = db.put("person", {"given_name": "John", "surname": "Smith"})
+        father_handle = father["handle"]
+
+        db.put("family", {"father_handle": father_handle})
+
+        row = conn.execute(
+            "SELECT change FROM person WHERE handle = ?", (father_handle,)
+        ).fetchone()
+        assert row["change"] > 0
+
+    def test_no_side_effect_when_family_written_without_parents(self, fresh_db):
+        db, conn = fresh_db
+        person = db.put("person", {"given_name": "John", "surname": "Smith"})
+        person_handle = person["handle"]
+
+        family = db.put("family", {})
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (person_handle,)
+        ).fetchone()
+        person_data = json.loads(row["json_data"])
+        assert family["handle"] not in person_data.get("family_list", [])

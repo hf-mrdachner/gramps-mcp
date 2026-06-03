@@ -639,6 +639,14 @@ class GrampsSqliteDB(GrampsXmlDB):
                         if isinstance(cr, dict) and cr.get("ref")
                     ]
                     _update_parent_family_list(self._conn, handle, child_handles)
+                # Fix C: update family_list of father/mother when family written with parent handles
+                if obj_type == "family":
+                    for parent_key in ("father_handle", "mother_handle"):
+                        if parent_key not in obj:
+                            continue
+                        parent_handle = gramps_json.get(parent_key)
+                        if parent_handle:
+                            _update_person_family_list(self._conn, handle, parent_handle)
         except sqlite3.Error as exc:
             raise GrampsAPIError(
                 f"SQLite write error for {obj_type}/{handle}: {exc}"
@@ -791,6 +799,39 @@ def _update_parent_family_list(conn: Any, family_handle: str, child_handles: Lis
                 "UPDATE person SET json_data = ?, change = ? WHERE handle = ?",  # noqa: S608
                 (json.dumps(person_data, ensure_ascii=False), person_data["change"], child_handle),
             )
+
+
+def _update_person_family_list(conn: Any, family_handle: str, person_handle: str) -> None:
+    """
+    Add family_handle to family_list of a spouse/parent person in the DB.
+
+    Called within the same SQLite transaction as the family write. Only adds;
+    never removes (removal is handled by dedicated tools).
+
+    Args:
+        conn: Open sqlite3.Connection within an active transaction.
+        family_handle: The family handle to add to the person's family_list.
+        person_handle: Handle of the father or mother to update.
+    """
+    row = conn.execute(
+        "SELECT json_data FROM person WHERE handle = ?",  # noqa: S608
+        (person_handle,),
+    ).fetchone()
+    if not row:
+        return
+    try:
+        person_data = json.loads(row[0])
+    except Exception:
+        return
+    fl = person_data.get("family_list", [])
+    if family_handle not in fl:
+        fl.append(family_handle)
+        person_data["family_list"] = fl
+        person_data["change"] = int(time.time())
+        conn.execute(
+            "UPDATE person SET json_data = ?, change = ? WHERE handle = ?",  # noqa: S608
+            (json.dumps(person_data, ensure_ascii=False), person_data["change"], person_handle),
+        )
 
 
 def _denorm_child_ref(cref: Any) -> Any:

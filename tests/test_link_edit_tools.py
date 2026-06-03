@@ -13,6 +13,7 @@ import json
 import sqlite3
 
 import pytest
+from mcp.types import TextContent
 
 from gramps_mcp._gramps_sqlite import GrampsSqliteDB
 from gramps_mcp.client import GrampsAPIError
@@ -188,7 +189,8 @@ class TestAddEventToPerson:
                 person_handle="h_pe", event_handle="h_ev", role="Witness", db=db
             )
         )
-        data = json.loads(result)
+        assert isinstance(result, list) and isinstance(result[0], TextContent)
+        data = json.loads(result[0].text)
         assert data["result"] == "ok"
         assert data["event_ref_count"] == 1
 
@@ -230,7 +232,7 @@ class TestAddEventToPerson:
         result = asyncio.run(
             add_event_to_person_tool(person_handle="h_pe", event_handle="h_ev", db=db)
         )
-        data = json.loads(result)
+        data = json.loads(result[0].text)
         assert data["result"] == "no_change"
 
         row = conn.execute(
@@ -288,7 +290,8 @@ class TestRemoveChildFromFamily:
                 family_handle="h_fam", child_handle="h_child", db=db
             )
         )
-        data = json.loads(result)
+        assert isinstance(result, list) and isinstance(result[0], TextContent)
+        data = json.loads(result[0].text)
         assert data["result"] == "ok"
         assert data["remaining_children"] == 0
 
@@ -359,7 +362,8 @@ class TestMoveAttachment:
                 db=db,
             )
         )
-        data = json.loads(result)
+        assert isinstance(result, list) and isinstance(result[0], TextContent)
+        data = json.loads(result[0].text)
         assert data["result"] == "ok"
 
         src_row = conn.execute(
