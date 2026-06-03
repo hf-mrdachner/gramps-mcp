@@ -353,3 +353,127 @@ class TestFamilyListAutoUpdate:
         ).fetchone()
         person_data = json.loads(row["json_data"])
         assert family["handle"] not in person_data.get("family_list", [])
+
+
+# ===========================================================================
+# Fix D — child_ref_list of families when person written with parent_family_list
+# ===========================================================================
+
+def _child_handles_in_family(conn, family_handle):
+    """Helper: extract ref handles from family child_ref_list."""
+    row = conn.execute(
+        "SELECT json_data FROM family WHERE handle = ?", (family_handle,)
+    ).fetchone()
+    family_data = json.loads(row["json_data"])
+    return [
+        cr["ref"] if isinstance(cr, dict) else cr
+        for cr in family_data.get("child_ref_list", [])
+    ]
+
+
+class TestChildRefListAutoUpdate:
+    def test_child_ref_list_updated_when_person_written_with_parent_family_list(
+        self, fresh_db
+    ):
+        db, conn = fresh_db
+        family = db.put("family", {})
+        family_handle = family["handle"]
+
+        person = db.put("person", {
+            "given_name": "James", "surname": "Smith",
+            "parent_family_list": [family_handle],
+        })
+        person_handle = person["handle"]
+
+        assert person_handle in _child_handles_in_family(conn, family_handle)
+
+    def test_child_ref_has_correct_structure(self, fresh_db):
+        db, conn = fresh_db
+        family = db.put("family", {})
+        family_handle = family["handle"]
+
+        person = db.put("person", {
+            "given_name": "James", "surname": "Smith",
+            "parent_family_list": [family_handle],
+        })
+        person_handle = person["handle"]
+
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle = ?", (family_handle,)
+        ).fetchone()
+        family_data = json.loads(row["json_data"])
+        child_ref = next(
+            cr for cr in family_data["child_ref_list"]
+            if isinstance(cr, dict) and cr.get("ref") == person_handle
+        )
+        assert child_ref["_class"] == "ChildRef"
+        assert child_ref["private"] is False
+
+    def test_child_ref_not_duplicated_on_double_write(self, fresh_db):
+        db, conn = fresh_db
+        family = db.put("family", {})
+        family_handle = family["handle"]
+
+        person = db.put("person", {
+            "given_name": "James", "surname": "Smith",
+            "parent_family_list": [family_handle],
+        })
+        person_handle = person["handle"]
+
+        # Write again — must not duplicate
+        db.put("person", {
+            "handle": person_handle,
+            "parent_family_list": [family_handle],
+        })
+
+        child_handles = _child_handles_in_family(conn, family_handle)
+        assert child_handles.count(person_handle) == 1
+
+    def test_multiple_families_all_updated(self, fresh_db):
+        db, conn = fresh_db
+        fam1 = db.put("family", {})
+        fam2 = db.put("family", {})
+
+        person = db.put("person", {
+            "given_name": "James", "surname": "Smith",
+            "parent_family_list": [fam1["handle"], fam2["handle"]],
+        })
+        person_handle = person["handle"]
+
+        assert person_handle in _child_handles_in_family(conn, fam1["handle"])
+        assert person_handle in _child_handles_in_family(conn, fam2["handle"])
+
+    def test_change_timestamp_bumped_for_family(self, fresh_db):
+        db, conn = fresh_db
+        family = db.put("family", {})
+        family_handle = family["handle"]
+
+        db.put("person", {
+            "given_name": "James", "surname": "Smith",
+            "parent_family_list": [family_handle],
+        })
+
+        row = conn.execute(
+            "SELECT change FROM family WHERE handle = ?", (family_handle,)
+        ).fetchone()
+        assert row["change"] > 0
+
+    def test_no_side_effect_when_person_written_without_parent_family_list(
+        self, fresh_db
+    ):
+        db, conn = fresh_db
+        family = db.put("family", {})
+        family_handle = family["handle"]
+
+        db.put("person", {"given_name": "James", "surname": "Smith"})
+
+        assert _child_handles_in_family(conn, family_handle) == []
+
+    def test_unknown_family_handle_silently_skipped(self, fresh_db):
+        db, conn = fresh_db
+
+        # Should not raise even when family doesn't exist
+        db.put("person", {
+            "given_name": "James", "surname": "Smith",
+            "parent_family_list": ["nonexistent_family_handle"],
+        })

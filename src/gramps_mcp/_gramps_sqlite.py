@@ -647,6 +647,10 @@ class GrampsSqliteDB(GrampsXmlDB):
                         parent_handle = gramps_json.get(parent_key)
                         if parent_handle:
                             _update_person_family_list(self._conn, handle, parent_handle)
+                # Fix D: update child_ref_list of families when person written with parent_family_list
+                if obj_type == "person" and "parent_family_list" in obj:
+                    parent_family_handles = gramps_json.get("parent_family_list", [])
+                    _update_family_child_ref_list(self._conn, handle, parent_family_handles)
         except sqlite3.Error as exc:
             raise GrampsAPIError(
                 f"SQLite write error for {obj_type}/{handle}: {exc}"
@@ -832,6 +836,58 @@ def _update_person_family_list(conn: Any, family_handle: str, person_handle: str
             "UPDATE person SET json_data = ?, change = ? WHERE handle = ?",  # noqa: S608
             (json.dumps(person_data, ensure_ascii=False), person_data["change"], person_handle),
         )
+
+
+def _update_family_child_ref_list(
+    conn: Any, person_handle: str, family_handles: List[str]
+) -> None:
+    """
+    Add person_handle to child_ref_list of each family in family_handles.
+
+    Called within the same SQLite transaction as the person write. Only adds;
+    never removes. Default relationship type is Birth (ChildRefType value 1).
+
+    Args:
+        conn: Open sqlite3.Connection within an active transaction.
+        person_handle: The person handle to add as a child.
+        family_handles: Family handles from the person's parent_family_list.
+    """
+    for family_handle in family_handles:
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle = ?",  # noqa: S608
+            (family_handle,),
+        ).fetchone()
+        if not row:
+            continue
+        try:
+            family_data = json.loads(row[0])
+        except Exception:
+            continue
+        child_ref_list = family_data.get("child_ref_list", [])
+        existing = [
+            cr["ref"] if isinstance(cr, dict) else cr
+            for cr in child_ref_list
+        ]
+        if person_handle not in existing:
+            child_ref_list.append({
+                "_class": "ChildRef",
+                "ref": person_handle,
+                "frel": {"_class": "ChildRefType", "value": 1, "string": ""},
+                "mrel": {"_class": "ChildRefType", "value": 1, "string": ""},
+                "private": False,
+                "citation_list": [],
+                "note_list": [],
+            })
+            family_data["child_ref_list"] = child_ref_list
+            family_data["change"] = int(time.time())
+            conn.execute(
+                "UPDATE family SET json_data = ?, change = ? WHERE handle = ?",  # noqa: S608
+                (
+                    json.dumps(family_data, ensure_ascii=False),
+                    family_data["change"],
+                    family_handle,
+                ),
+            )
 
 
 def _denorm_child_ref(cref: Any) -> Any:
