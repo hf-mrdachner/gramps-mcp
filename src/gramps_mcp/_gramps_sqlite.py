@@ -906,6 +906,162 @@ def _denorm_child_ref(cref: Any) -> Any:
     return result
 
 
+def _denorm_place_ref(ref: Any) -> Any:
+    """Denormalise a single place-ref dict back to Gramps JSON format."""
+    if not isinstance(ref, dict):
+        return ref
+    result = dict(ref)
+    result["_class"] = "PlaceRef"
+    result["date"] = _denorm_date(result.get("date", {}))
+    return result
+
+
+def _denorm_url(url: Any) -> Any:
+    """Denormalise a single URL dict back to Gramps JSON format."""
+    if not isinstance(url, dict):
+        return url
+    path = url.get("path") or url.get("href", "")
+    desc = url.get("desc") or url.get("description", "")
+    url_type = url.get("type", {})
+    if not isinstance(url_type, dict):
+        url_type = {"_class": "UrlType", "value": 0, "string": ""}
+    elif "_class" not in url_type:
+        url_type = {"_class": "UrlType", **url_type}
+    return {
+        "_class": "Url",
+        "path": path,
+        "desc": desc,
+        "type": url_type,
+        "private": bool(url.get("private", False)),
+    }
+
+
+def _denorm_place_name(name: Any) -> Any:
+    """Denormalise a place name dict back to Gramps JSON PlaceName format."""
+    if not isinstance(name, dict):
+        return name
+    return {
+        "_class": "PlaceName",
+        "value": name.get("value", ""),
+        "date": _denorm_date(name.get("date", {})),
+        "lang": name.get("lang", ""),
+    }
+
+
+def _denorm_media_ref(ref: Any) -> Any:
+    """Denormalise a single media-ref dict back to Gramps JSON MediaRef format."""
+    if not isinstance(ref, dict):
+        return ref
+    result = dict(ref)
+    result["_class"] = "MediaRef"
+    result.setdefault("rect", None)
+    result.setdefault("private", False)
+    result.setdefault("note_list", [])
+    result.setdefault("attribute_list", [])
+    result.setdefault("citation_list", [])
+    return result
+
+
+def _denorm_attribute(attr: Any) -> Any:
+    """Denormalise a single attribute dict back to Gramps JSON Attribute format."""
+    if not isinstance(attr, dict):
+        return attr
+    result = dict(attr)
+    result["_class"] = "Attribute"
+    atype = result.pop("type", {})
+    if isinstance(atype, str):
+        atype = {"_class": "AttributeType", "value": 0, "string": atype}
+    elif not isinstance(atype, dict):
+        atype = {"_class": "AttributeType", "value": 0, "string": ""}
+    elif "_class" not in atype:
+        atype["_class"] = "AttributeType"
+    result["type"] = atype
+    result.setdefault("value", "")
+    result.setdefault("private", False)
+    result.setdefault("citation_list", [])
+    result.setdefault("note_list", [])
+    return result
+
+
+def _denorm_address(addr: Any) -> Any:
+    """Denormalise a single address dict back to Gramps JSON Address format."""
+    if not isinstance(addr, dict):
+        return addr
+    result = dict(addr)
+    result["_class"] = "Address"
+    result["date"] = _denorm_date(result.get("date", {}))
+    for field in ("street", "locality", "city", "county", "state",
+                  "country", "postal", "phone"):
+        result.setdefault(field, "")
+    result.setdefault("private", False)
+    result.setdefault("citation_list", [])
+    result.setdefault("note_list", [])
+    return result
+
+
+def _denorm_person_ref(ref: Any) -> Any:
+    """Denormalise a single person-ref dict back to Gramps JSON PersonRef format."""
+    if not isinstance(ref, dict):
+        return ref
+    result = dict(ref)
+    result["_class"] = "PersonRef"
+    result.setdefault("rel", "")
+    result.setdefault("private", False)
+    result.setdefault("note_list", [])
+    result.setdefault("citation_list", [])
+    result.setdefault("attribute_list", [])
+    return result
+
+
+def _denorm_lds_ord(ord_: Any) -> Any:
+    """Denormalise a single LDS ordinance dict back to Gramps JSON LdsOrd format."""
+    if not isinstance(ord_, dict):
+        return ord_
+    result = dict(ord_)
+    result["_class"] = "LdsOrd"
+    result["date"] = _denorm_date(result.get("date", {}))
+    result.setdefault("temple", "")
+    result.setdefault("place", None)
+    result.setdefault("family_handle", None)
+    result.setdefault("status", {"_class": "LdsOrdStatus", "value": 0, "string": ""})
+    result.setdefault("private", False)
+    result.setdefault("citation_list", [])
+    result.setdefault("note_list", [])
+    return result
+
+
+def _denorm_repo_ref(ref: Any) -> Any:
+    """Denormalise a single repo-ref dict back to Gramps JSON RepoRef format."""
+    if not isinstance(ref, dict):
+        return ref
+    result = dict(ref)
+    result["_class"] = "RepoRef"
+    if "callno" in result and "call_number" not in result:
+        result["call_number"] = result.pop("callno")
+    result.setdefault("call_number", "")
+    # type (string or missing) → media_type SourceMediaType object
+    mtype = result.pop("type", result.pop("media_type", {}))
+    if not isinstance(mtype, dict):
+        mtype = {"_class": "SourceMediaType", "value": 0, "string": ""}
+    elif "_class" not in mtype:
+        mtype["_class"] = "SourceMediaType"
+    result["media_type"] = mtype
+    result.setdefault("note_list", [])
+    result.setdefault("private", False)
+    return result
+
+
+def _denorm_note_text(text: Any) -> Any:
+    """Denormalise note text to Gramps JSON StyledText format."""
+    if not isinstance(text, dict):
+        return {"_class": "StyledText", "string": str(text) if text else "", "tags": []}
+    result = dict(text)
+    result["_class"] = "StyledText"
+    result.setdefault("string", "")
+    result.setdefault("tags", [])
+    return result
+
+
 def _merge_into(base: Dict, patch: Dict, obj_type: str) -> None:
     """Apply normalised patch fields onto an existing Gramps JSON base."""
     field_map = _FIELD_PATCH_MAP.get(obj_type, {})
@@ -928,7 +1084,7 @@ def _merge_into(base: Dict, patch: Dict, obj_type: str) -> None:
             # FamilySaveParams convenience: flat handle list → child_ref_list
             base["child_ref_list"] = [_denorm_child_ref({"ref": h}) for h in val]
         elif obj_type == "place" and key == "name" and isinstance(val, dict):
-            base["name"] = {"_class": "PlaceName", **val}
+            base["name"] = _denorm_place_name(val)
             new_val = val.get("value", "")
             if new_val:
                 existing_title = base.get("title", "")
@@ -937,6 +1093,24 @@ def _merge_into(base: Dict, patch: Dict, obj_type: str) -> None:
                     base["title"] = f"{new_val},{suffix}"
                 else:
                     base["title"] = new_val
+        elif obj_type == "place" and key == "placeref_list" and isinstance(val, list):
+            base[gramps_key] = [_denorm_place_ref(r) for r in val]
+        elif key == "urls" and isinstance(val, list):
+            base[gramps_key] = [_denorm_url(u) for u in val]
+        elif key == "reporef_list" and isinstance(val, list):
+            base[gramps_key] = [_denorm_repo_ref(r) for r in val]
+        elif key == "media_list" and isinstance(val, list):
+            base[gramps_key] = [_denorm_media_ref(m) for m in val]
+        elif key == "attribute_list" and isinstance(val, list):
+            base[gramps_key] = [_denorm_attribute(a) for a in val]
+        elif key == "address_list" and isinstance(val, list):
+            base[gramps_key] = [_denorm_address(a) for a in val]
+        elif key == "person_ref_list" and isinstance(val, list):
+            base[gramps_key] = [_denorm_person_ref(r) for r in val]
+        elif key == "lds_ord_list" and isinstance(val, list):
+            base[gramps_key] = [_denorm_lds_ord(o) for o in val]
+        elif obj_type == "note" and key == "text" and isinstance(val, dict):
+            base[gramps_key] = _denorm_note_text(val)
         elif isinstance(val, list):
             base[gramps_key] = val  # plain handle lists: note_list, citation_list, …
         elif val is not None:
@@ -1028,7 +1202,7 @@ def _empty_gramps_json(obj_type: str) -> Dict:
             "_class": "Place", "title": "", "long": "", "lat": "", "code": "",
             "place_type": {"_class": "PlaceType", "value": -1, "string": ""},
             "alt_names": [], "placeref_list": [],
-            "name": {"_class": "PlaceName", "value": ""},
+            "name": {"_class": "PlaceName", "value": "", "date": _denorm_date({}), "lang": ""},
             "alt_loc": [], "urls": [], "media_list": [], "citation_list": [],
             "note_list": [], "tag_list": [], "enclosed_by": [],
         },
