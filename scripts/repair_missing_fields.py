@@ -377,6 +377,39 @@ def repair_table(
     return len(rows), fixed
 
 
+def repair_person_secondary_columns(
+    conn: sqlite3.Connection,
+    dry_run: bool,
+) -> Tuple[int, int]:
+    """
+    Fix person.surname and person.given_name secondary columns that are NULL.
+
+    Gramps' get_surname_list() reads the surname column directly; NULL causes
+    changenames.py to crash on name.strip().
+    """
+    rows = conn.execute(
+        "SELECT handle, json_data FROM person WHERE surname IS NULL OR given_name IS NULL"  # noqa: S608
+    ).fetchall()
+    fixed = 0
+    for handle, jdata in rows:
+        try:
+            data = json.loads(jdata)
+        except Exception as exc:
+            print(f"  WARN: person/{handle}: JSON parse error: {exc}")
+            continue
+        pn = data.get("primary_name", {})
+        sl = pn.get("surname_list", [])
+        surname = sl[0].get("surname") or "" if sl else ""
+        given_name = pn.get("first_name") or ""
+        fixed += 1
+        if not dry_run:
+            conn.execute(
+                "UPDATE person SET surname=?, given_name=? WHERE handle=?",  # noqa: S608
+                (surname, given_name, handle),
+            )
+    return len(rows), fixed
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -406,6 +439,10 @@ def main() -> None:
                 status = "would fix" if args.dry_run else "fixed"
                 print(f"  {table:12s}: scanned {scanned:5d}  {status} {fixed}")
                 total_fixed += fixed
+            scanned, fixed = repair_person_secondary_columns(conn, args.dry_run)
+            status = "would fix" if args.dry_run else "fixed"
+            print(f"  {'person.cols':12s}: scanned {scanned:5d}  {status} {fixed}")
+            total_fixed += fixed
     finally:
         conn.close()
 

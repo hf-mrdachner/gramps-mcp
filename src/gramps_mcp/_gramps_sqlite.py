@@ -1154,13 +1154,13 @@ def _denorm_name(name: Dict) -> Dict:
     if not isinstance(name, dict):
         return name
     result = {"_class": "Name"}
-    result["first_name"] = name.get("first_name", "")
-    result["suffix"] = name.get("suffix", "")
-    result["title"] = name.get("title", "")
-    result["call"] = name.get("call", "")
-    result["nick"] = name.get("nick", "")
-    result["famnick"] = name.get("famnick", "")
-    result["group_as"] = name.get("group_as", "")
+    result["first_name"] = name.get("first_name") or ""
+    result["suffix"] = name.get("suffix") or ""
+    result["title"] = name.get("title") or ""
+    result["call"] = name.get("call") or ""
+    result["nick"] = name.get("nick") or ""
+    result["famnick"] = name.get("famnick") or ""
+    result["group_as"] = name.get("group_as") or ""
     result["sort_as"] = name.get("sort_as", 0)
     result["display_as"] = name.get("display_as", 0)
     result["private"] = bool(name.get("private", False))
@@ -1173,10 +1173,10 @@ def _denorm_name(name: Dict) -> Dict:
     for sn in name.get("surname_list", []):
         surname_list.append({
             "_class": "Surname",
-            "surname": sn.get("surname", ""),
-            "prefix": sn.get("prefix", ""),
+            "surname": sn.get("surname") or "",
+            "prefix": sn.get("prefix") or "",
             "primary": bool(sn.get("primary", True)),
-            "connector": sn.get("connector", ""),
+            "connector": sn.get("connector") or "",
             "origintype": {"_class": "NameOriginType", "value": 1, "string": ""},
         })
     result["surname_list"] = surname_list
@@ -1295,8 +1295,8 @@ def _secondaries(obj_type: str, obj: Dict) -> Dict[str, Any]:
         sl = pn.get("surname_list", [])
         return {
             "gramps_id": gid, "gender": obj.get("gender", 2),
-            "given_name": pn.get("first_name", ""),
-            "surname": sl[0].get("surname", "") if sl else "",
+            "given_name": pn.get("first_name") or "",
+            "surname": sl[0].get("surname") or "" if sl else "",
             "birth_ref_index": obj.get("birth_ref_index", -1),
             "death_ref_index": obj.get("death_ref_index", -1),
             "change": change, "private": private,
