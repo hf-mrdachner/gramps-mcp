@@ -85,6 +85,23 @@ PLACE_TYPE: Dict[int, str] = {
     13: "Borough", 14: "Municipality", 15: "Town", 16: "Village",
     17: "Hamlet", 18: "Farm", 19: "Building", 20: "Number",
 }
+NOTE_TYPE: Dict[int, str] = {
+    -1: "Unknown", 0: "Custom", 1: "General", 2: "Research", 3: "Transcript",
+    4: "Person Note", 5: "Attribute Note", 6: "Address Note",
+    7: "Association Note", 8: "LDS Note", 9: "Source Note",
+    10: "Source Reference Note", 11: "Citation Note", 12: "Event Note",
+    13: "Event Reference Note", 14: "Place Note", 15: "Repository Note",
+    16: "Repository Reference Note", 17: "Media Note",
+    18: "Media Reference Note", 19: "Child Reference Note",
+    20: "Family Note", 21: "HTML code",
+}
+REPOSITORY_TYPE: Dict[int, str] = {
+    -1: "Unknown", 0: "Custom", 1: "Library", 2: "Cemetery", 3: "Church",
+    4: "National Archive", 5: "Regional Archive", 6: "Institutional Archive",
+    7: "Specialty Archive", 8: "Published Work", 9: "Personal Collection",
+    10: "Computer Format", 11: "Audio/Video", 12: "Collection",
+    13: "Miscellaneous",
+}
 
 _TYPE_MAPS: Dict[str, Dict[int, str]] = {
     "EventType": EVENT_TYPE,
@@ -93,12 +110,15 @@ _TYPE_MAPS: Dict[str, Dict[int, str]] = {
     "ChildRefType": CHILD_REF_TYPE,
     "NameType": NAME_TYPE,
     "PlaceType": PLACE_TYPE,
+    "NoteType": NOTE_TYPE,
+    "RepositoryType": REPOSITORY_TYPE,
     "NameOriginType": {},
 }
 # Custom sentinel value per type class (used when string field is non-empty)
 _CUSTOM: Dict[str, int] = {
     "EventType": 0, "FamilyRelType": 4, "EventRoleType": 0,
-    "ChildRefType": 7, "NameType": 0, "PlaceType": 0, "NameOriginType": 0,
+    "ChildRefType": 7, "NameType": 0, "PlaceType": 0,
+    "NoteType": 0, "RepositoryType": 0, "NameOriginType": 0,
 }
 # Reverse maps: display string → int value
 _REV_TYPE_MAPS: Dict[str, Dict[str, int]] = {
@@ -238,15 +258,26 @@ def _denorm_date(d: Any) -> Dict:
         Gramps JSON date dict with ``_class`` and ``text`` key.
     """
     _empty_dateval = [0, 0, 0, False]
+
+    def _safe_dateval(raw: Any) -> list:
+        # Gramps _display_gregorian accesses dateval[2] and dateval[3].
+        # Pad any short list to the minimum 4 elements [day, month, year, slash].
+        dv = list(raw) if isinstance(raw, (list, tuple)) and raw else list(_empty_dateval)
+        while len(dv) < 3:
+            dv.append(0)
+        if len(dv) == 3:
+            dv.append(False)
+        return dv
+
     if not isinstance(d, dict):
         return {"_class": "Date", "calendar": 0, "modifier": 0, "quality": 0,
-                "dateval": _empty_dateval, "text": "", "sortval": 0, "newyear": 0, "format": None}
+                "dateval": list(_empty_dateval), "text": "", "sortval": 0, "newyear": 0, "format": None}
     return {
         "_class": "Date",
         "calendar": d.get("calendar", 0),
         "modifier": d.get("modifier", 0),
         "quality": d.get("quality", 0),
-        "dateval": d.get("dateval") or _empty_dateval,
+        "dateval": _safe_dateval(d.get("dateval")),
         "text": d.get("string", ""),
         "sortval": d.get("sortval", 0),
         "newyear": d.get("newyear", 0),
@@ -725,6 +756,7 @@ def _denorm_event_ref(eref: Any) -> Any:
     if isinstance(result.get("role"), str):
         result["role"] = _denorm_type(result["role"], "EventRoleType")
     result.setdefault("note_list", [])
+    result.setdefault("citation_list", [])
     result.setdefault("attribute_list", [])
     result.setdefault("private", False)
     return result
@@ -1161,6 +1193,8 @@ _FIELD_CONVERTERS: Dict[Tuple[str, str], Any] = {
     ("event", "type"): lambda v: _denorm_type(v, "EventType"),
     ("family", "relationship"): lambda v: _denorm_type(v, "FamilyRelType"),
     ("place", "place_type"): lambda v: _denorm_type(v, "PlaceType"),
+    ("note", "type"): lambda v: _denorm_type(v, "NoteType"),
+    ("repository", "type"): lambda v: _denorm_type(v, "RepositoryType"),
 }
 
 
@@ -1204,7 +1238,7 @@ def _empty_gramps_json(obj_type: str) -> Dict:
             "alt_names": [], "placeref_list": [],
             "name": {"_class": "PlaceName", "value": "", "date": _denorm_date({}), "lang": ""},
             "alt_loc": [], "urls": [], "media_list": [], "citation_list": [],
-            "note_list": [], "tag_list": [], "enclosed_by": [],
+            "note_list": [], "tag_list": [],
         },
         "source": {
             "_class": "Source", "title": "", "author": "", "pubinfo": "",

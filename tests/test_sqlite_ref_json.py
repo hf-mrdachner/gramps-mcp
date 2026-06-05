@@ -175,3 +175,69 @@ class TestLdsOrdJson:
     def test_empty_lds_ord_list(self):
         result = _build("person", {"lds_ord_list": []})
         assert result["lds_ord_list"] == []
+
+
+# ---------------------------------------------------------------------------
+# Gramps-compliance: attribute_list always present
+# ---------------------------------------------------------------------------
+# Gramps 6's cleanup_empty_objects does raw dict[key] access (no .get()).
+# Missing attribute_list causes KeyError and crashes the DB check tool and
+# the citations list view. These tests ensure the field is ALWAYS written,
+# even when the caller does not pass it.
+
+
+class TestAttributeListAlwaysPresent:
+    """Top-level attribute_list must be present in all object types that have it."""
+
+    def test_person_has_attribute_list_without_input(self):
+        result = _build("person", {})
+        assert "attribute_list" in result, "person template missing attribute_list"
+
+    def test_family_has_attribute_list_without_input(self):
+        result = _build("family", {})
+        assert "attribute_list" in result, "family template missing attribute_list"
+
+    def test_event_has_attribute_list_without_input(self):
+        result = _build("event", {})
+        assert "attribute_list" in result, "event template missing attribute_list"
+
+    def test_citation_has_attribute_list_without_input(self):
+        result = _build("citation", {})
+        assert "attribute_list" in result, "citation template missing attribute_list"
+
+    def test_source_has_attribute_list_without_input(self):
+        result = _build("source", {})
+        assert "attribute_list" in result, "source template missing attribute_list"
+
+    def test_media_has_attribute_list_without_input(self):
+        result = _build("media", {})
+        assert "attribute_list" in result, "media template missing attribute_list"
+
+
+class TestSubObjectAttributeList:
+    """Sub-objects (EventRef, MediaRef, PersonRef) must carry attribute_list."""
+
+    def test_event_ref_has_attribute_list(self):
+        result = _build("person", {"event_ref_list": [{"ref": "h_event"}]})
+        item = result["event_ref_list"][0]
+        assert "attribute_list" in item, f"EventRef missing attribute_list: {item}"
+
+    def test_media_ref_has_attribute_list(self):
+        result = _build("person", {"media_list": [{"ref": "h_media"}]})
+        item = result["media_list"][0]
+        assert "attribute_list" in item, f"MediaRef missing attribute_list: {item}"
+
+    def test_person_ref_has_attribute_list(self):
+        result = _build("person", {"person_ref_list": [{"ref": "h_p", "rel": "DNA"}]})
+        item = result["person_ref_list"][0]
+        assert "attribute_list" in item, f"PersonRef missing attribute_list: {item}"
+
+    def test_family_event_ref_has_attribute_list(self):
+        result = _build("family", {"event_ref_list": [{"ref": "h_event"}]})
+        item = result["event_ref_list"][0]
+        assert "attribute_list" in item, f"Family EventRef missing attribute_list: {item}"
+
+    def test_family_media_ref_has_attribute_list(self):
+        result = _build("family", {"media_list": [{"ref": "h_media"}]})
+        item = result["media_list"][0]
+        assert "attribute_list" in item, f"Family MediaRef missing attribute_list: {item}"
