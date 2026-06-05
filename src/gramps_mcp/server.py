@@ -105,6 +105,7 @@ from .tools.search_details import (
     find_duplicate_citations_tool,
     find_duplicate_events_tool,
     get_event_tool,
+    get_family_tool,
     get_person_tool,
     get_place_tool,
     get_type_tool,
@@ -172,6 +173,10 @@ class GetPersonParams(BaseModel):
 
 class GetEventParams(BaseModel):
     gramps_id: str = Field(..., description="Gramps event ID (e.g. 'E0001')")
+
+
+class GetFamilyParams(BaseModel):
+    gramps_id: str = Field(..., description="Gramps family ID (e.g. 'F0001')")
 
 
 class GetPlaceParams(BaseModel):
@@ -317,6 +322,15 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         ),
         "schema": GetPersonParams,
         "handler": get_person_tool,
+    },
+    "get_family": {
+        "description": (
+            "Get full family details by gramps_id: parents with birth/death dates, "
+            "children with dates and relationship types, marriage event, timeline, "
+            "notes, and media. Use this to inspect a specific family unit."
+        ),
+        "schema": GetFamilyParams,
+        "handler": get_family_tool,
     },
     "get_event": {
         "description": (

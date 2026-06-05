@@ -102,9 +102,23 @@ class TestGetPersonToolGramsId:
         result = await get_person_tool.__wrapped__(sqlite_client, {"handle": "h_pe_john"})
         assert any("John" in r.text for r in result)
 
+
+# ---------------------------------------------------------------------------
+# Tool integration — get_family_tool
+# ---------------------------------------------------------------------------
+
+class TestGetFamilyToolHandleOrId:
     async def test_get_family_by_gramps_id(self, sqlite_client):
         from gramps_mcp.tools.search_details import get_family_tool
         result = await get_family_tool.__wrapped__(sqlite_client, {"gramps_id": "F0001"})
+        assert any(
+            "F0001" in r.text or "Smith" in r.text or "John" in r.text
+            for r in result
+        )
+
+    async def test_get_family_by_handle(self, sqlite_client):
+        from gramps_mcp.tools.search_details import get_family_tool
+        result = await get_family_tool.__wrapped__(sqlite_client, {"handle": "h_fa_smith"})
         assert any(
             "F0001" in r.text or "Smith" in r.text or "John" in r.text
             for r in result
