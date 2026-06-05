@@ -146,7 +146,7 @@ def _find_duplicate_events(
     conn: sqlite3.Connection,
     wp: dict,
     lp: dict,
-) -> Tuple[Set[str], Dict[str, dict], Set[str]]:
+) -> Tuple[Set[str], Dict[str, dict], Set[str], Dict[str, str]]:
     """
     Identify loser events that duplicate a winner event.
 
@@ -164,13 +164,15 @@ def _find_duplicate_events(
 
     Returns:
         Tuple of:
-          events_to_skip  — loser event handles to exclude from event_ref_list merge
-          event_updates   — winner_event_handle -> updated event JSON
+          events_to_skip   — loser event handles to exclude from event_ref_list merge
+          event_updates    — winner_event_handle -> updated event JSON
           events_to_delete — loser event handles to remove from the event table
+          events_to_replace — loser_event_handle -> winner_event_handle (for family fixup)
     """
     events_to_skip: Set[str] = set()
     event_updates: Dict[str, dict] = {}
     events_to_delete: Set[str] = set()
+    events_to_replace: Dict[str, str] = {}
 
     winner_events: Dict[str, dict] = {}
     for eref in wp.get("event_ref_list", []):
@@ -206,9 +208,10 @@ def _find_duplicate_events(
             if merged != wev:
                 event_updates[wh] = merged
             events_to_delete.add(lh)
+            events_to_replace[lh] = wh
             break
 
-    return events_to_skip, event_updates, events_to_delete
+    return events_to_skip, event_updates, events_to_delete, events_to_replace
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +256,7 @@ def merge_persons(
 
     changes: List[str] = []
 
-    events_to_skip, event_updates, events_to_delete = _find_duplicate_events(conn, wp, lp)
+    events_to_skip, event_updates, events_to_delete, events_to_replace = _find_duplicate_events(conn, wp, lp)
     if events_to_delete:
         type_labels = []
         for h in events_to_delete:
@@ -326,7 +329,7 @@ def merge_persons(
     with conn:
         _commit_merge(
             conn, wp, winner_handle, loser_handle,
-            event_updates, events_to_delete, loser_family_handles,
+            event_updates, events_to_delete, events_to_replace, loser_family_handles,
         )
 
     if backup_file:
@@ -342,6 +345,7 @@ def _commit_merge(
     loser_handle: str,
     event_updates: Dict[str, dict],
     events_to_delete: Set[str],
+    events_to_replace: Dict[str, str],
     loser_family_handles: Set[str],
 ) -> None:
     """
@@ -354,6 +358,8 @@ def _commit_merge(
         loser_handle: Loser handle (will be deleted).
         event_updates: Mapping of winner event handles to updated event JSON.
         events_to_delete: Loser event handles to remove.
+        events_to_replace: Loser event handle -> winner event handle; used to fix
+            family event_ref_lists so no dangling refs are left after deletion.
         loser_family_handles: Family handles from loser's family/parent_family lists;
             used for a targeted fetch instead of a full table scan.
     """
@@ -392,6 +398,39 @@ def _commit_merge(
                     c["ref"] = winner_handle
                     changed = True
             if changed:
+                conn.execute(
+                    "UPDATE family SET json_data=? WHERE handle=?",
+                    (json.dumps(fam, ensure_ascii=False), row["handle"]),
+                )
+
+    # Fix family event_ref_lists: loser events being deleted may still be
+    # referenced by families (e.g. the marriage event appears in both the
+    # person's and the family's event_ref_list). Replace or remove each
+    # deleted loser event handle across ALL families that reference it.
+    for loser_ev, winner_ev in events_to_replace.items():
+        fam_rows_ev = conn.execute(
+            "SELECT handle, json_data FROM family WHERE json_data LIKE ?",
+            (f"%{loser_ev}%",),
+        ).fetchall()
+        for row in fam_rows_ev:
+            fam = json.loads(row["json_data"])
+            erefs = fam.get("event_ref_list", [])
+            winner_already = any(
+                e.get("ref") == winner_ev for e in erefs if isinstance(e, dict)
+            )
+            new_erefs = []
+            for e in erefs:
+                if not (isinstance(e, dict) and e.get("ref") == loser_ev):
+                    new_erefs.append(e)
+                elif not winner_already:
+                    # Replace loser ref with winner ref in-place
+                    replaced = dict(e)
+                    replaced["ref"] = winner_ev
+                    new_erefs.append(replaced)
+                    winner_already = True
+                # else: winner already present — just drop the loser ref
+            if new_erefs != erefs:
+                fam["event_ref_list"] = new_erefs
                 conn.execute(
                     "UPDATE family SET json_data=? WHERE handle=?",
                     (json.dumps(fam, ensure_ascii=False), row["handle"]),

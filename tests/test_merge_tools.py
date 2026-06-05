@@ -398,3 +398,133 @@ class TestSplitPerson:
         db, backup = merged_db
         split_person(db, "I_W", backup)
         split_person(db, "I_W", backup)  # second call must not crash
+
+
+# ---------------------------------------------------------------------------
+# 8. merge_persons — family event_ref_list fixup (regression)
+#
+# When a marriage event appears in BOTH a person's event_ref_list AND the
+# family's event_ref_list, merging the loser person used to leave the family
+# with a dangling ref to the deleted loser event.
+# ---------------------------------------------------------------------------
+
+def _make_marriage_merge_db() -> sqlite3.Connection:
+    """
+    DB with winner/loser sharing a marriage event that is also in a family.
+
+    Family F1 has father=winner, mother=loser (for simplicity), and the
+    marriage event in its event_ref_list.  Both spouses also carry the ref
+    in their own event_ref_list.
+
+    Winner person  h_w — event_ref_list: [marriage h_ev_m_w (winner's copy)]
+    Loser person   h_l — event_ref_list: [marriage h_ev_m_l (loser's copy, same type/date)]
+    Family F1 — event_ref_list: [h_ev_m_l] (points to LOSER event)
+
+    After merge the loser marriage event h_ev_m_l should be gone, the family
+    event_ref_list should point to the winner event h_ev_m_w (not be dangling).
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(_SCHEMA)
+
+    # Marriage event type = 1, year 1855
+    ev_mw = _event("h_ev_m_w", "E10", 1, 1855, "p_church")
+    ev_ml = _event("h_ev_m_l", "E11", 1, 1855, "p_church")
+    _insert_event(conn, ev_mw)
+    _insert_event(conn, ev_ml)
+
+    p_w = _person("h_w", "I_W2", "Johann", "Bauer", 1, [_eref("h_ev_m_w")])
+    p_l = _person("h_l", "I_L2", "Johann", "Bauer", 1, [_eref("h_ev_m_l")])
+    _insert_person(conn, "Johann", "Bauer", 1, p_w)
+    _insert_person(conn, "Johann", "Bauer", 1, p_l)
+
+    # Family references the LOSER marriage event
+    fam = {
+        "_class": "Family", "handle": "h_f1", "gramps_id": "F0001",
+        "father_handle": "h_w", "mother_handle": "h_l",
+        "child_ref_list": [],
+        "event_ref_list": [_eref("h_ev_m_l", role_val=1)],
+        "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+        "change": 0, "private": False,
+    }
+    conn.execute(
+        "INSERT INTO family (handle, gramps_id, json_data, father_handle, mother_handle) "
+        "VALUES (?,?,?,?,?)",
+        ["h_f1", "F0001", json.dumps(fam), "h_w", "h_l"],
+    )
+    conn.commit()
+    return conn
+
+
+class TestMergePersonsFamilyEventFixup:
+    def test_family_event_ref_replaced_not_dangling(self):
+        """Family event_ref_list must not point to the deleted loser event."""
+        conn = _make_marriage_merge_db()
+        merge_persons(conn, "h_w", "h_l", dry_run=False)
+
+        # Loser event must be gone
+        assert conn.execute(
+            "SELECT 1 FROM event WHERE handle='h_ev_m_l'"
+        ).fetchone() is None
+
+        # Family must no longer reference the deleted event
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle='h_f1'"
+        ).fetchone()
+        fam = json.loads(row["json_data"])
+        refs = [e.get("ref") for e in fam.get("event_ref_list", []) if isinstance(e, dict)]
+        assert "h_ev_m_l" not in refs, f"Dangling ref found: {refs}"
+
+    def test_family_event_ref_points_to_winner_event(self):
+        """After merge the family should reference the winner event."""
+        conn = _make_marriage_merge_db()
+        merge_persons(conn, "h_w", "h_l", dry_run=False)
+
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle='h_f1'"
+        ).fetchone()
+        fam = json.loads(row["json_data"])
+        refs = [e.get("ref") for e in fam.get("event_ref_list", []) if isinstance(e, dict)]
+        assert "h_ev_m_w" in refs, f"Winner event ref missing: {refs}"
+
+    def test_winner_event_not_duplicated_in_family(self):
+        """If winner event was already in the family, it must not appear twice."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(_SCHEMA)
+
+        ev_mw = _event("h_ev_m_w", "E10", 1, 1855, "p_church")
+        ev_ml = _event("h_ev_m_l", "E11", 1, 1855, "p_church")
+        _insert_event(conn, ev_mw)
+        _insert_event(conn, ev_ml)
+
+        p_w = _person("h_w", "I_W2", "Johann", "Bauer", 1, [_eref("h_ev_m_w")])
+        p_l = _person("h_l", "I_L2", "Johann", "Bauer", 1, [_eref("h_ev_m_l")])
+        _insert_person(conn, "Johann", "Bauer", 1, p_w)
+        _insert_person(conn, "Johann", "Bauer", 1, p_l)
+
+        # Family already has BOTH events
+        fam = {
+            "_class": "Family", "handle": "h_f1", "gramps_id": "F0001",
+            "father_handle": "h_w", "mother_handle": "h_l",
+            "child_ref_list": [],
+            "event_ref_list": [_eref("h_ev_m_w", role_val=1), _eref("h_ev_m_l", role_val=1)],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        conn.execute(
+            "INSERT INTO family (handle, gramps_id, json_data, father_handle, mother_handle) "
+            "VALUES (?,?,?,?,?)",
+            ["h_f1", "F0001", json.dumps(fam), "h_w", "h_l"],
+        )
+        conn.commit()
+
+        merge_persons(conn, "h_w", "h_l", dry_run=False)
+
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle='h_f1'"
+        ).fetchone()
+        fam_after = json.loads(row["json_data"])
+        refs = [e.get("ref") for e in fam_after.get("event_ref_list", []) if isinstance(e, dict)]
+        assert refs.count("h_ev_m_w") == 1, f"Duplicate winner ref: {refs}"
+        assert "h_ev_m_l" not in refs, f"Dangling loser ref: {refs}"
