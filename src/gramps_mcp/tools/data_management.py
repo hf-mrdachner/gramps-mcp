@@ -89,6 +89,15 @@ async def _handle_crud_operation(
 ) -> List[TextContent]:
     """Common helper for create/update operations."""
     try:
+        from ..gramps_id import resolve_handles
+
+        # Resolve gramps_id → handle so the create-vs-update check below is correct.
+        resolve_client = get_client()
+        try:
+            params = await resolve_handles(params, {"handle": entity_type}, resolve_client)
+        finally:
+            await resolve_client.close()
+
         # Validate parameters
         validated_params = param_class(**params)
 
@@ -333,6 +342,14 @@ async def create_media_tool(arguments: Dict) -> List[TextContent]:
     import os
 
     try:
+        from ..gramps_id import resolve_handles
+
+        resolve_client = get_client()
+        try:
+            arguments = await resolve_handles(arguments, {"handle": "media"}, resolve_client)
+        finally:
+            await resolve_client.close()
+
         # Extract file_location separately (not part of MediaSaveParams)
         file_location = arguments.get("file_location")
 
@@ -416,7 +433,13 @@ async def create_repository_tool(arguments: Dict) -> List[TextContent]:
     Create or update repository information.
     """
     try:
-        # Let Pydantic model handle parameter validation
+        from ..gramps_id import resolve_handles
+
+        resolve_client = get_client()
+        try:
+            arguments = await resolve_handles(arguments, {"handle": "repository"}, resolve_client)
+        finally:
+            await resolve_client.close()
 
         # Assert required parameters
         if not arguments.get("name"):

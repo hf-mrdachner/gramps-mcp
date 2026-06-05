@@ -206,3 +206,38 @@ class TestLinkEditToolsGramsId:
         )
         assert resolved["family_handle"] == "h_fa_smith"
         assert resolved["child_handle"] == "h_pe_child"
+
+
+# ---------------------------------------------------------------------------
+# CRUD tools — gramps_id should trigger UPDATE not INSERT
+# ---------------------------------------------------------------------------
+
+
+class TestCrudGramsIdResolution:
+    async def test_create_person_with_gramps_id_does_update(self, monkeypatch, sqlite_client):
+        """create_person_tool with gramps_id instead of handle must update, not insert."""
+        import gramps_mcp.tools.data_management as dm
+        monkeypatch.setattr(dm, "get_client", lambda: sqlite_client)
+        result = await dm.create_person_tool({
+            "gramps_id": "I0001",
+            "primary_name": {
+                "first_name": "John Robert",
+                "surname_list": [{"surname": "Smith", "prefix": "", "primary": True,
+                                  "connector": ""}],
+            },
+            "gender": 1,
+        })
+        text = " ".join(r.text for r in result)
+        assert "updated" in text.lower(), f"Expected 'updated', got: {text[:200]}"
+
+    async def test_create_event_with_gramps_id_does_update(self, monkeypatch, sqlite_client):
+        """create_event_tool with gramps_id instead of handle must update, not insert."""
+        import gramps_mcp.tools.data_management as dm
+        monkeypatch.setattr(dm, "get_client", lambda: sqlite_client)
+        result = await dm.create_event_tool({
+            "gramps_id": "E0001",
+            "type": "Birth",
+            "citation_list": [],
+        })
+        text = " ".join(r.text for r in result)
+        assert "updated" in text.lower(), f"Expected 'updated', got: {text[:200]}"
