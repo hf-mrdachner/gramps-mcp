@@ -85,13 +85,11 @@ class TestParameterAlignment:
         model = CitationData
         fields = model.model_fields
         
-        # Required fields according to guide (using actual field names)
-        required_fields = {'source_handle'}
-        
-        # Check all required fields are present and required
-        for field_name in required_fields:
-            assert field_name in fields, f"Required field '{field_name}' missing from CitationData"
-            assert fields[field_name].is_required(), f"Field '{field_name}' should be required"
+        # source_handle is optional — source_gramps_id can be used instead
+        required_fields = set()
+
+        # source_handle must at least be present as a field
+        assert 'source_handle' in fields, "Field 'source_handle' missing from CitationData"
         
         # Check no extra required fields beyond what guide specifies
         actual_required = {name for name, field in fields.items() if field.is_required()}
@@ -99,7 +97,7 @@ class TestParameterAlignment:
         assert not extra_required, f"CitationData has extra required fields not in guide: {extra_required}"
         
         # Check no extra fields beyond what guide allows (plus system fields from BaseDataModel)
-        guide_fields = required_fields | {'page', 'date', 'media', 'urls'}
+        guide_fields = {'source_handle', 'source_gramps_id', 'page', 'date', 'media', 'urls'}
         system_fields = {'handle', 'gramps_id', 'note_list', 'media_list', 'attribute_list', 'tag_list', 'private', 'change'}
         allowed_fields = guide_fields | system_fields
         actual_fields = set(fields.keys())
@@ -196,7 +194,8 @@ class TestParameterAlignment:
         # Check no extra fields beyond what guide allows (plus system fields from BaseDataModel and linking fields)
         guide_fields = {'notes', 'media', 'urls'}
         system_fields = {'handle', 'gramps_id', 'note_list', 'media_list', 'attribute_list', 'tag_list', 'private', 'change'}
-        allowed_fields = guide_fields | system_fields | family_linking_fields
+        gramps_id_fields = {'father_gramps_id', 'mother_gramps_id', 'child_gramps_ids'}
+        allowed_fields = guide_fields | system_fields | family_linking_fields | gramps_id_fields
         actual_fields = set(fields.keys())
         extra_fields = actual_fields - allowed_fields
         assert not extra_fields, f"FamilySaveParams has extra fields not in usage guide: {extra_fields}"

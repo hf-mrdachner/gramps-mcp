@@ -36,5 +36,4 @@ jobs:
             --ignore=tests/test_complete_workflow.py \
             --ignore=tests/test_auth_integration.py \
             --ignore=tests/test_search_details.py \
-            --ignore=tests/test_parameter_alignment.py \
             -v --tb=short
