@@ -113,7 +113,93 @@ async def add_event_to_person_tool(
 
 
 # ---------------------------------------------------------------------------
-# Tool 2: remove_event_from_person
+# Tool 2: add_event_to_family
+# ---------------------------------------------------------------------------
+
+
+async def add_event_to_family_tool(
+    family_handle: Optional[str] = None,
+    event_handle: Optional[str] = None,
+    family_gramps_id: Optional[str] = None,
+    event_gramps_id: Optional[str] = None,
+    role: str = "Family",
+    db: Any = None,
+) -> List[TextContent]:
+    """
+    Append an event reference to a family's event_ref_list without replacing it.
+
+    SQLite backend only.
+
+    Args:
+        family_handle: Handle of the family.
+        event_handle: Handle of the event to link (must already exist).
+        family_gramps_id: Gramps ID of the family (alternative to family_handle).
+        event_gramps_id: Gramps ID of the event (alternative to event_handle).
+        role: Role of the family in the event (default: 'Family').
+        db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
+
+    Returns:
+        List[TextContent] with JSON result.
+
+    Raises:
+        GrampsAPIError: If backend is not SQLite or objects not found.
+    """
+    db = _require_sqlite_db(db, "add_event_to_family")
+    conn = db._conn
+
+    family_handle = _resolve_handle(conn, "family", family_handle, family_gramps_id, "Family")
+    event_handle = _resolve_handle(conn, "event", event_handle, event_gramps_id, "Event")
+
+    family_data = _read_object(conn, "family", family_handle, "Family")
+
+    if not conn.execute(
+        "SELECT handle FROM event WHERE handle = ?",  # noqa: S608
+        (event_handle,),
+    ).fetchone():
+        raise GrampsAPIError(f"Event with handle '{event_handle}' not found")
+
+    event_ref_list = family_data.get("event_ref_list", [])
+
+    existing_handles = [
+        e.get("ref") for e in event_ref_list if isinstance(e, dict)
+    ]
+    if event_handle in existing_handles:
+        return [TextContent(type="text", text=json.dumps(
+            {
+                "result": "no_change",
+                "message": f"Event '{event_handle}' is already linked to this family.",
+            },
+            ensure_ascii=False,
+        ))]
+
+    new_ref = {
+        "_class": "EventRef",
+        "ref": event_handle,
+        "role": _denorm_type(role, "EventRoleType"),
+        "private": False,
+        "note_list": [],
+        "attribute_list": [],
+    }
+    event_ref_list.append(new_ref)
+    family_data["event_ref_list"] = event_ref_list
+
+    with conn:
+        _write_object(conn, "family", family_handle, family_data)
+
+    return [TextContent(type="text", text=json.dumps(
+        {
+            "result": "ok",
+            "family_handle": family_handle,
+            "event_handle": event_handle,
+            "role": role,
+            "event_ref_count": len(event_ref_list),
+        },
+        ensure_ascii=False,
+    ))]
+
+
+# ---------------------------------------------------------------------------
+# Tool 3: remove_event_from_person
 # ---------------------------------------------------------------------------
 
 

@@ -31,6 +31,31 @@ class AddEventToPersonParams(BaseModel):
     )
 
 
+class AddEventToFamilyParams(BaseModel):
+    """Parameters for add_event_to_family tool."""
+
+    family_handle: Optional[str] = Field(
+        None, description="Handle of the family to link the event to"
+    )
+    family_gramps_id: Optional[str] = Field(
+        None,
+        description="Gramps ID of the family (e.g. 'F0001'). Alternative to family_handle.",
+    )
+    event_handle: Optional[str] = Field(
+        None, description="Handle of the event to link (must already exist in the DB)"
+    )
+    event_gramps_id: Optional[str] = Field(
+        None,
+        description="Gramps ID of the event (e.g. 'E0001'). Alternative to event_handle.",
+    )
+    role: str = Field(
+        "Family",
+        description=(
+            "Role of the family in the event. Common values: Family, Primary. Default: Family."
+        ),
+    )
+
+
 class RemoveChildFromFamilyParams(BaseModel):
     """Parameters for remove_child_from_family tool."""
 
