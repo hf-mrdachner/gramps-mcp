@@ -14,6 +14,17 @@ from gramps_mcp.client import GrampsAPIError
 from gramps_mcp.models.api_calls import ApiCalls
 
 
+@pytest.fixture
+def fresh_db():
+    """Function-scoped GrampsSqliteDB — use for write tests to avoid polluting the shared session fixture."""
+    import os, sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from conftest_sqlite import _make_in_memory_db
+    from gramps_mcp._gramps_sqlite import GrampsSqliteDB
+    conn = _make_in_memory_db()
+    return GrampsSqliteDB(conn=conn, db_path=":memory:", read_only=False)
+
+
 # ===========================================================================
 # XML parsing: Person
 # ===========================================================================
@@ -238,24 +249,24 @@ class TestPlaceParsing:
         assert len(urls) == 1
         assert "wikipedia" in urls[0]["path"]
 
-    def test_update_name_updates_title(self, sqlite_db):
-        sqlite_db.put("place", {
+    def test_update_name_updates_title(self, fresh_db):
+        fresh_db.put("place", {
             "handle": "h_pl_berlin",
             "place_type": "City",
             "name": {"value": "Berlin (neu)", "lang": ""},
         })
-        place = sqlite_db.get("place", "h_pl_berlin")
+        place = fresh_db.get("place", "h_pl_berlin")
         assert place["name"]["value"] == "Berlin (neu)"
         assert place["title"].startswith("Berlin (neu)")
 
-    def test_update_name_preserves_class(self, sqlite_db):
+    def test_update_name_preserves_class(self, fresh_db):
         import json
-        sqlite_db.put("place", {
+        fresh_db.put("place", {
             "handle": "h_pl_berlin",
             "place_type": "City",
             "name": {"value": "Berlin updated"},
         })
-        row = sqlite_db._conn.execute(
+        row = fresh_db._conn.execute(
             "SELECT json_data FROM place WHERE handle = 'h_pl_berlin'"
         ).fetchone()
         raw = json.loads(row[0])
