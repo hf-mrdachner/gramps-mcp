@@ -38,10 +38,12 @@ from .models.parameters.citation_params import CitationData
 from .models.parameters.delete_params import DeleteObjectParams
 from .models.parameters.link_edit_params import (
     AddCitationToEventParams,
+    AddEventToFamilyParams,
     AddEventToPersonParams,
     MoveAttachmentParams,
     RemoveCitationFromEventParams,
     RemoveChildFromFamilyParams,
+    RemoveEventFromFamilyParams,
     RemoveEventFromPersonParams,
 )
 from .models.parameters.dna_params import (
@@ -94,9 +96,11 @@ from .tools import (
 )
 from .tools.delete import delete_object_tool
 from .tools.link_edit import (
+    add_event_to_family_tool,
     add_event_to_person_tool,
     move_attachment_tool,
     remove_child_from_family_tool,
+    remove_event_from_family_tool,
     remove_event_from_person_tool,
 )
 from .tools.citation_link import (
@@ -251,6 +255,27 @@ class PrepareBiographyParams(BaseModel):
     include_events: Optional[list] = Field(
         None,
         description="Event types to include, e.g. ['Birth','Death']. Default: all standard events.",
+    )
+
+
+async def _handle_remove_event_from_family(args: Dict) -> Any:
+    """Handler for remove_event_from_family."""
+    return await remove_event_from_family_tool(
+        family_handle=args.get("family_handle"),
+        event_handle=args.get("event_handle"),
+        family_gramps_id=args.get("family_gramps_id"),
+        event_gramps_id=args.get("event_gramps_id"),
+    )
+
+
+async def _handle_add_event_to_family(args: Dict) -> Any:
+    """Handler for add_event_to_family."""
+    return await add_event_to_family_tool(
+        family_handle=args.get("family_handle"),
+        event_handle=args.get("event_handle"),
+        family_gramps_id=args.get("family_gramps_id"),
+        event_gramps_id=args.get("event_gramps_id"),
+        role=args.get("role", "Family"),
     )
 
 
@@ -643,6 +668,24 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "schema": DeleteObjectParams,
         "handler": delete_object_tool,
     },
+    "add_event_to_family": {
+        "description": (
+            "Append an event reference to a family's event_ref_list without replacing it. "
+            "Use this instead of create_family when you want to add a single event and "
+            "preserve existing event links. SQLite backend only."
+        ),
+        "schema": AddEventToFamilyParams,
+        "handler": _handle_add_event_to_family,
+    },
+    "remove_event_from_family": {
+        "description": (
+            "Remove an event reference from a family's event_ref_list. "
+            "Does not delete the event object itself — use delete_object for that. "
+            "SQLite backend only."
+        ),
+        "schema": RemoveEventFromFamilyParams,
+        "handler": _handle_remove_event_from_family,
+    },
     "add_event_to_person": {
         "description": (
             "Append an event reference to a person's event_ref_list without replacing it. "
@@ -716,6 +759,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "event": [
         "create_event", "get_event",
         "add_event_to_person", "remove_event_from_person",
+        "add_event_to_family", "remove_event_from_family",
     ],
     "citation": [
         "create_citation", "create_source", "create_repository",
@@ -724,6 +768,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "family": [
         "create_family", "get_family",
         "merge_families", "remove_child_from_family",
+        "add_event_to_family", "remove_event_from_family",
     ],
     "search": [
         "find_anything", "find_type", "get_type",

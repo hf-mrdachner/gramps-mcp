@@ -62,39 +62,47 @@ class TestMCPServerSetup:
     
     @pytest.mark.asyncio
     async def test_tool_registration(self):
-        """Test that only 3 simplified tools plus create/analysis tools are registered."""
+        """Test that all expected tools are registered in the MCP server."""
         endpoint = f"{BASE_URL}/mcp"
-        
+
         async with streamablehttp_client(endpoint) as client_streams:
-            read_stream, write_stream, _ = client_streams  # Unpack 3 elements
+            read_stream, write_stream, _ = client_streams
             async with ClientSession(read_stream, write_stream) as session:
-                # Initialize session
                 result = await session.initialize()
                 assert isinstance(result, InitializeResult)
                 assert result.serverInfo.name == "gramps"
-                
-                # List tools
+
                 tools_result = await session.list_tools()
                 tools = tools_result.tools
-                assert len(tools) == 16  # 3 simplified + 9 create + 4 analysis tools
-                
-                # Verify all expected tools are registered
+                assert len(tools) == 45
+
                 expected_tools = {
-                    # Simplified Search & Retrieval Tools (3)
+                    # Search & Discovery
                     "find_type", "find_anything", "get_type",
-                    
-                    # Data Creation & Management Tools (9) - keep unchanged
+                    "get_person", "get_family", "get_event", "get_place",
+                    # Data Management
                     "create_person", "create_family", "create_event", "create_place",
                     "create_source", "create_citation", "create_note", "create_media",
                     "create_repository",
-                    
-                    # Tree Management Tools (1)
-                    "tree_stats",
-                    
-                    # Analysis Tools (3)
-                    "get_descendants", "get_ancestors", "recent_changes"
+                    # Analysis
+                    "tree_stats", "get_descendants", "get_ancestors", "recent_changes",
+                    # Database Lifecycle
+                    "list_databases", "open_database", "close_database",
+                    # Merge
+                    "find_duplicate_persons", "merge_persons", "split_person",
+                    "merge_places", "merge_families", "merge_events", "merge_citations",
+                    "find_duplicate_citations", "find_duplicate_events",
+                    # Link Edit (SQLite backend)
+                    "add_event_to_person", "remove_event_from_person",
+                    "add_event_to_family", "remove_event_from_family",
+                    "remove_child_from_family", "move_attachment",
+                    # Citation Link (SQLite backend)
+                    "add_citation_to_event", "remove_citation_from_event",
+                    # Other
+                    "delete_object", "prepare_biography",
+                    "add_dna_match", "get_dna_matches", "update_dna_match",
                 }
-                
+
                 registered_tool_names = {tool.name for tool in tools}
                 assert registered_tool_names == expected_tools
     
@@ -130,7 +138,7 @@ class TestHTTPRoutes:
             assert response.status_code == 200
             data = response.json()
             assert data["service"] == "Gramps MCP Server"
-            assert data["tools_count"] == 16  # 3 simplified + 9 create + 4 analysis
+            assert data["tools_count"] == 45
 
     @pytest.mark.asyncio
     async def test_health_endpoint(self):
@@ -160,7 +168,7 @@ class TestMCPProtocolCompliance:
                 
                 # List tools
                 tools_result = await session.list_tools()
-                assert len(tools_result.tools) == 16  # 3 simplified + 9 create + 4 analysis
+                assert len(tools_result.tools) == 45
     
     @pytest.mark.asyncio
     async def test_mcp_tool_call_find_type_real_api(self):

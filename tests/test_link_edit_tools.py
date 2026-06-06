@@ -520,6 +520,252 @@ class TestAddEventToPersonGrampsId:
 
 
 # ===========================================================================
+# add_event_to_family
+# ===========================================================================
+
+class TestAddEventToFamily:
+    def test_event_appended_to_family(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_family_tool
+
+        db, conn = fresh_db
+        _insert_family(conn, "h_fam", "F0001")
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        result = asyncio.run(
+            add_event_to_family_tool(
+                family_handle="h_fam", event_handle="h_ev", role="Family", db=db
+            )
+        )
+        assert isinstance(result, list) and isinstance(result[0], TextContent)
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+        assert data["event_ref_count"] == 1
+
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle = 'h_fam'"
+        ).fetchone()
+        family_data = json.loads(row["json_data"])
+        refs = [e["ref"] for e in family_data.get("event_ref_list", [])]
+        assert "h_ev" in refs
+
+    def test_no_duplicate_on_double_call(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_family_tool
+
+        db, conn = fresh_db
+        _insert_family(conn, "h_fam", "F0001")
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        asyncio.run(
+            add_event_to_family_tool(family_handle="h_fam", event_handle="h_ev", db=db)
+        )
+        result = asyncio.run(
+            add_event_to_family_tool(family_handle="h_fam", event_handle="h_ev", db=db)
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "no_change"
+
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle = 'h_fam'"
+        ).fetchone()
+        family_data = json.loads(row["json_data"])
+        assert len(family_data.get("event_ref_list", [])) == 1
+
+    def test_error_on_unknown_family_handle(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_family_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        with pytest.raises(GrampsAPIError, match="Family.*not found"):
+            asyncio.run(
+                add_event_to_family_tool(
+                    family_handle="nonexistent", event_handle="h_ev", db=db
+                )
+            )
+
+    def test_error_on_unknown_event_handle(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_family_tool
+
+        db, conn = fresh_db
+        _insert_family(conn, "h_fam", "F0001")
+
+        with pytest.raises(GrampsAPIError, match="Event.*not found"):
+            asyncio.run(
+                add_event_to_family_tool(
+                    family_handle="h_fam", event_handle="nonexistent", db=db
+                )
+            )
+
+    def test_add_via_family_gramps_id(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_family_tool
+
+        db, conn = fresh_db
+        _insert_family(conn, "h_fam", "F0001")
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        result = asyncio.run(
+            add_event_to_family_tool(
+                family_gramps_id="F0001", event_handle="h_ev", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+        assert data["event_ref_count"] == 1
+
+    def test_add_via_event_gramps_id(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_family_tool
+
+        db, conn = fresh_db
+        _insert_family(conn, "h_fam", "F0001")
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        result = asyncio.run(
+            add_event_to_family_tool(
+                family_handle="h_fam", event_gramps_id="E0001", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+
+    def test_error_when_neither_handle_nor_gramps_id(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_family_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        with pytest.raises(GrampsAPIError, match="handle or gramps_id required"):
+            asyncio.run(
+                add_event_to_family_tool(event_handle="h_ev", db=db)
+            )
+
+    def test_event_ref_count_excludes_malformed_entries(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_family_tool
+
+        db, conn = fresh_db
+        # Pre-populate family with a malformed EventRef (no "ref" key)
+        malformed_family_data = {
+            "_class": "Family", "handle": "h_fam", "gramps_id": "F0001",
+            "father_handle": None, "mother_handle": None,
+            "child_ref_list": [],
+            "type": {"_class": "FamilyRelType", "value": 0, "string": ""},
+            "event_ref_list": [{"_class": "EventRef", "private": False}],  # missing "ref"
+            "media_list": [], "attribute_list": [], "lds_ord_list": [],
+            "citation_list": [], "note_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        conn.execute(
+            "INSERT INTO family (handle, gramps_id, json_data, change, private) VALUES (?,?,?,0,0)",
+            ("h_fam", "F0001", json.dumps(malformed_family_data)),
+        )
+        conn.commit()
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        result = asyncio.run(
+            add_event_to_family_tool(family_handle="h_fam", event_handle="h_ev", db=db)
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+        # Count should reflect only valid (non-malformed) refs plus the new one
+        assert data["event_ref_count"] == 1
+
+
+# ===========================================================================
+# remove_event_from_family
+# ===========================================================================
+
+class TestRemoveEventFromFamily:
+    def test_event_removed_from_family(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_event_from_family_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev", "E0001", 42)
+        _insert_family(conn, "h_fam", "F0001")
+        # Pre-link the event
+        fam_data = json.loads(
+            conn.execute("SELECT json_data FROM family WHERE handle='h_fam'").fetchone()[0]
+        )
+        fam_data["event_ref_list"] = [
+            {"_class": "EventRef", "ref": "h_ev",
+             "role": {"_class": "EventRoleType", "value": 0, "string": ""},
+             "private": False, "note_list": [], "attribute_list": []}
+        ]
+        conn.execute(
+            "UPDATE family SET json_data=? WHERE handle='h_fam'",
+            (json.dumps(fam_data),),
+        )
+        conn.commit()
+
+        result = asyncio.run(
+            remove_event_from_family_tool(
+                family_handle="h_fam", event_handle="h_ev", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+        assert data["event_ref_count"] == 0
+
+        row = conn.execute("SELECT json_data FROM family WHERE handle='h_fam'").fetchone()
+        family_data = json.loads(row[0])
+        refs = [e["ref"] for e in family_data.get("event_ref_list", [])]
+        assert "h_ev" not in refs
+
+    def test_remove_via_gramps_ids(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_event_from_family_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev", "E0001", 42)
+        _insert_family(conn, "h_fam", "F0001")
+        fam_data = json.loads(
+            conn.execute("SELECT json_data FROM family WHERE handle='h_fam'").fetchone()[0]
+        )
+        fam_data["event_ref_list"] = [
+            {"_class": "EventRef", "ref": "h_ev",
+             "role": {"_class": "EventRoleType", "value": 0, "string": ""},
+             "private": False, "note_list": [], "attribute_list": []}
+        ]
+        conn.execute(
+            "UPDATE family SET json_data=? WHERE handle='h_fam'",
+            (json.dumps(fam_data),),
+        )
+        conn.commit()
+
+        result = asyncio.run(
+            remove_event_from_family_tool(
+                family_gramps_id="F0001", event_gramps_id="E0001", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+
+    def test_error_when_event_not_linked(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_event_from_family_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev", "E0001", 42)
+        _insert_family(conn, "h_fam", "F0001")
+
+        with pytest.raises(GrampsAPIError, match="not linked"):
+            asyncio.run(
+                remove_event_from_family_tool(
+                    family_handle="h_fam", event_handle="h_ev", db=db
+                )
+            )
+
+    def test_error_on_unknown_family_handle(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_event_from_family_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        with pytest.raises(GrampsAPIError, match="Family.*not found"):
+            asyncio.run(
+                remove_event_from_family_tool(
+                    family_handle="nonexistent", event_handle="h_ev", db=db
+                )
+            )
+
+
+# ===========================================================================
 # remove_event_from_person
 # ===========================================================================
 

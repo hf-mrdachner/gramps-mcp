@@ -10,6 +10,7 @@ import sqlite3
 import pytest
 
 from gramps_mcp._gramps_sqlite import GrampsSqliteDB
+from gramps_mcp.client import GrampsAPIError
 
 # ---------------------------------------------------------------------------
 # Minimal schema — only the tables needed for these tests
@@ -477,3 +478,31 @@ class TestChildRefListAutoUpdate:
             "given_name": "James", "surname": "Smith",
             "parent_family_list": ["nonexistent_family_handle"],
         })
+
+
+# ===========================================================================
+# Fix E — _write_object / _write_person raise on missing handle
+# ===========================================================================
+
+class TestWriteObjectRowcount:
+    def test_write_object_raises_when_family_handle_not_found(self, fresh_db):
+        from gramps_mcp.tools._sqlite_helpers import _write_object
+
+        db, conn = fresh_db
+        with pytest.raises(GrampsAPIError, match="not found"):
+            with conn:
+                _write_object(conn, "family", "nonexistent_handle", {
+                    "_class": "Family", "handle": "nonexistent_handle",
+                    "child_ref_list": [], "event_ref_list": [],
+                })
+
+    def test_write_person_raises_when_person_handle_not_found(self, fresh_db):
+        from gramps_mcp.tools._sqlite_helpers import _write_person
+
+        db, conn = fresh_db
+        with pytest.raises(GrampsAPIError, match="not found"):
+            with conn:
+                _write_person(conn, "nonexistent_handle", {
+                    "_class": "Person", "handle": "nonexistent_handle",
+                    "event_ref_list": [],
+                })
