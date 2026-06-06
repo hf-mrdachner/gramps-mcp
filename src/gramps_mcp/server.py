@@ -37,9 +37,12 @@ from pydantic import BaseModel, Field
 from .models.parameters.citation_params import CitationData
 from .models.parameters.delete_params import DeleteObjectParams
 from .models.parameters.link_edit_params import (
+    AddCitationToEventParams,
     AddEventToPersonParams,
     MoveAttachmentParams,
+    RemoveCitationFromEventParams,
     RemoveChildFromFamilyParams,
+    RemoveEventFromPersonParams,
 )
 from .models.parameters.dna_params import (
     AddDnaMatchParams,
@@ -94,6 +97,11 @@ from .tools.link_edit import (
     add_event_to_person_tool,
     move_attachment_tool,
     remove_child_from_family_tool,
+    remove_event_from_person_tool,
+)
+from .tools.citation_link import (
+    add_citation_to_event_tool,
+    remove_citation_from_event_tool,
 )
 from .tools.dna import (
     add_dna_match_tool,
@@ -247,14 +255,43 @@ class PrepareBiographyParams(BaseModel):
 
 
 async def _handle_add_event_to_person(args: Dict) -> Any:
-    """Handler for add_event_to_person with gramps_id resolution."""
-    args = await resolve_handles(
-        args, {"person_handle": "person", "event_handle": "event"}, get_client()
-    )
+    """Handler for add_event_to_person."""
     return await add_event_to_person_tool(
-        person_handle=args["person_handle"],
-        event_handle=args["event_handle"],
+        person_handle=args.get("person_handle"),
+        event_handle=args.get("event_handle"),
+        person_gramps_id=args.get("person_gramps_id"),
+        event_gramps_id=args.get("event_gramps_id"),
         role=args.get("role", "Primary"),
+    )
+
+
+async def _handle_remove_event_from_person(args: Dict) -> Any:
+    """Handler for remove_event_from_person."""
+    return await remove_event_from_person_tool(
+        person_handle=args.get("person_handle"),
+        event_handle=args.get("event_handle"),
+        person_gramps_id=args.get("person_gramps_id"),
+        event_gramps_id=args.get("event_gramps_id"),
+    )
+
+
+async def _handle_add_citation_to_event(args: Dict) -> Any:
+    """Handler for add_citation_to_event."""
+    return await add_citation_to_event_tool(
+        event_handle=args.get("event_handle"),
+        event_gramps_id=args.get("event_gramps_id"),
+        citation_handle=args.get("citation_handle"),
+        citation_gramps_id=args.get("citation_gramps_id"),
+    )
+
+
+async def _handle_remove_citation_from_event(args: Dict) -> Any:
+    """Handler for remove_citation_from_event."""
+    return await remove_citation_from_event_tool(
+        event_handle=args.get("event_handle"),
+        event_gramps_id=args.get("event_gramps_id"),
+        citation_handle=args.get("citation_handle"),
+        citation_gramps_id=args.get("citation_gramps_id"),
     )
 
 
@@ -616,6 +653,35 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "schema": AddEventToPersonParams,
         "handler": _handle_add_event_to_person,
     },
+    "remove_event_from_person": {
+        "description": (
+            "Remove an event reference from a person's event_ref_list. "
+            "Automatically recalculates birth_ref_index and death_ref_index after removal. "
+            "Does not delete the event object itself — use delete_object for that. "
+            "SQLite backend only."
+        ),
+        "schema": RemoveEventFromPersonParams,
+        "handler": _handle_remove_event_from_person,
+    },
+    "add_citation_to_event": {
+        "description": (
+            "Add a citation to an existing event's citation_list without replacing it. "
+            "Idempotent: adding an already-linked citation returns result='no_change'. "
+            "Use this instead of create_event when you only want to attach a citation. "
+            "SQLite backend only."
+        ),
+        "schema": AddCitationToEventParams,
+        "handler": _handle_add_citation_to_event,
+    },
+    "remove_citation_from_event": {
+        "description": (
+            "Remove a citation from an existing event's citation_list. "
+            "Raises an error if the citation is not in the list. "
+            "SQLite backend only."
+        ),
+        "schema": RemoveCitationFromEventParams,
+        "handler": _handle_remove_citation_from_event,
+    },
     "remove_child_from_family": {
         "description": (
             "Remove a child from a family and clean up the child's parent_family_list. "
@@ -640,8 +706,53 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
 }
 
 
+# Tool groups for gramps://tools/<group> resources
+TOOL_GROUPS: dict[str, list[str]] = {
+    "person": [
+        "create_person", "get_person",
+        "merge_persons", "split_person", "find_duplicate_persons",
+        "add_dna_match", "get_dna_matches", "update_dna_match",
+    ],
+    "event": [
+        "create_event", "get_event",
+        "add_event_to_person", "remove_event_from_person",
+    ],
+    "citation": [
+        "create_citation", "create_source", "create_repository",
+        "add_citation_to_event", "remove_citation_from_event",
+    ],
+    "family": [
+        "create_family", "get_family",
+        "merge_families", "remove_child_from_family",
+    ],
+    "search": [
+        "find_anything", "find_type", "get_type",
+        "get_ancestors", "get_descendants", "tree_stats",
+        "recent_changes", "find_duplicate_events", "find_duplicate_citations",
+    ],
+    "admin": [
+        "list_databases", "open_database", "close_database",
+    ],
+}
+
+
 # Create FastMCP app with stateless HTTP (no SSE)
-app = FastMCP("gramps", stateless_http=True, json_response=True)
+app = FastMCP(
+    "gramps-genealogy",
+    stateless_http=True,
+    json_response=True,
+    instructions=(
+        "Gramps genealogy database — SQLite backend.\n\n"
+        "Load a tool-group resource before working in a domain:\n\n"
+        "  gramps://tools/person    — create/get/merge/split persons, DNA\n"
+        "  gramps://tools/event     — create/get events, add/remove event↔person links\n"
+        "  gramps://tools/citation  — create citations/sources, add/remove citation↔event links\n"
+        "  gramps://tools/family    — create/get/merge families, child links\n"
+        "  gramps://tools/search    — find_anything, ancestors, descendants, tree stats\n"
+        "  gramps://tools/admin     — open/close/list databases\n\n"
+        "Before writing raw SQLite: always check if an MCP tool covers the operation."
+    ),
+)
 
 
 # ============================================================================
@@ -709,6 +820,62 @@ def get_usage_guide() -> str:
     explains proper genealogy workflow and tool usage order.
     """
     return load_resource("gramps-usage-guide.md")
+
+
+def _generate_tool_group_resource(group_name: str) -> str:
+    """Generate Markdown documentation for a named tool group."""
+    tool_names = TOOL_GROUPS.get(group_name, [])
+    lines = [f"# Gramps Tools — {group_name.title()}\n"]
+    for name in tool_names:
+        config = TOOL_REGISTRY.get(name)
+        if not config:
+            continue
+        lines.append(f"### {name}")
+        lines.append(config["description"])
+        schema = config["schema"]
+        lines.append("\n**Parameters:**")
+        for field_name, field_info in schema.model_fields.items():
+            req = "(required)" if field_info.is_required() else "(optional)"
+            desc = field_info.description or ""
+            lines.append(f"  - `{field_name}` {req}: {desc}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+@app.resource("gramps://tools/person")
+def get_person_tools() -> str:
+    """Person-related tools: create, get, merge, split, DNA."""
+    return _generate_tool_group_resource("person")
+
+
+@app.resource("gramps://tools/event")
+def get_event_tools() -> str:
+    """Event tools: create, get, add/remove event↔person links."""
+    return _generate_tool_group_resource("event")
+
+
+@app.resource("gramps://tools/citation")
+def get_citation_tools() -> str:
+    """Citation and source tools: create, add/remove citation↔event links."""
+    return _generate_tool_group_resource("citation")
+
+
+@app.resource("gramps://tools/family")
+def get_family_tools() -> str:
+    """Family tools: create, get, merge, child management."""
+    return _generate_tool_group_resource("family")
+
+
+@app.resource("gramps://tools/search")
+def get_search_tools() -> str:
+    """Search and analysis tools: find_anything, ancestors, descendants, stats."""
+    return _generate_tool_group_resource("search")
+
+
+@app.resource("gramps://tools/admin")
+def get_admin_tools() -> str:
+    """Database management tools: open, close, list databases."""
+    return _generate_tool_group_resource("admin")
 
 
 # Add custom routes to the FastMCP app

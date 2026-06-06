@@ -48,6 +48,23 @@ class RemoveChildFromFamilyParams(BaseModel):
     )
 
 
+class RemoveEventFromPersonParams(BaseModel):
+    """Parameters for remove_event_from_person tool."""
+
+    person_handle: Optional[str] = Field(
+        None, description="Handle of the person"
+    )
+    person_gramps_id: Optional[str] = Field(
+        None, description="Gramps ID of the person (e.g. 'I0042'). Alternative to person_handle."
+    )
+    event_handle: Optional[str] = Field(
+        None, description="Handle of the event to unlink"
+    )
+    event_gramps_id: Optional[str] = Field(
+        None, description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle."
+    )
+
+
 class MoveAttachmentParams(BaseModel):
     """Parameters for move_attachment tool."""
 
@@ -73,4 +90,40 @@ class MoveAttachmentParams(BaseModel):
     )
     to_type: Literal["person", "family"] = Field(
         "person", description="Type of the target object: 'person' or 'family'"
+    )
+
+
+class AddCitationToEventParams(BaseModel):
+    """Parameters for add_citation_to_event tool."""
+
+    event_handle: Optional[str] = Field(
+        None, description="Handle of the event"
+    )
+    event_gramps_id: Optional[str] = Field(
+        None, description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle."
+    )
+    citation_handle: Optional[str] = Field(
+        None, description="Handle of the citation to add"
+    )
+    citation_gramps_id: Optional[str] = Field(
+        None,
+        description="Gramps ID of the citation (e.g. 'C0012'). Alternative to citation_handle.",
+    )
+
+
+class RemoveCitationFromEventParams(BaseModel):
+    """Parameters for remove_citation_from_event tool."""
+
+    event_handle: Optional[str] = Field(
+        None, description="Handle of the event"
+    )
+    event_gramps_id: Optional[str] = Field(
+        None, description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle."
+    )
+    citation_handle: Optional[str] = Field(
+        None, description="Handle of the citation to remove"
+    )
+    citation_gramps_id: Optional[str] = Field(
+        None,
+        description="Gramps ID of the citation (e.g. 'C0012'). Alternative to citation_handle.",
     )

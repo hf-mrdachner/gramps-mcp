@@ -8,110 +8,19 @@ db= parameters for testability (same pattern as delete_object_tool).
 """
 
 import json
-import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional
 
 from mcp.types import TextContent
 
-from gramps_mcp._gramps_sqlite import GrampsSqliteDB, _compute_birth_death_indices, _denorm_type
+from gramps_mcp._gramps_sqlite import _denorm_type
 from gramps_mcp.client import GrampsAPIError
-
-
-def _read_object(conn: Any, table: str, handle: str, label: str) -> Dict:
-    """
-    Read and JSON-parse an object from the DB.
-
-    Args:
-        conn: Open sqlite3.Connection.
-        table: Table name (e.g. 'person', 'family', 'event').
-        handle: Object handle.
-        label: Human-readable object label for error messages.
-
-    Returns:
-        Parsed Gramps JSON dict.
-
-    Raises:
-        GrampsAPIError: If handle not found.
-    """
-    row = conn.execute(
-        f"SELECT json_data FROM {table} WHERE handle = ?",  # noqa: S608
-        (handle,),
-    ).fetchone()
-    if not row:
-        raise GrampsAPIError(f"{label} with handle '{handle}' not found")
-    return json.loads(row[0])
-
-
-def _write_person(conn: Any, handle: str, person_data: Dict) -> None:
-    """
-    Write person JSON back to DB, auto-computing birth/death ref indices.
-
-    Args:
-        conn: Open sqlite3.Connection within an active transaction.
-        handle: Person handle.
-        person_data: Gramps JSON dict (mutated in place: sets change, indices).
-    """
-    person_data["change"] = int(time.time())
-    birth_idx, death_idx = _compute_birth_death_indices(
-        conn, person_data.get("event_ref_list", [])
-    )
-    person_data["birth_ref_index"] = birth_idx
-    person_data["death_ref_index"] = death_idx
-    conn.execute(
-        "UPDATE person SET json_data=?, birth_ref_index=?, death_ref_index=?, change=? "
-        "WHERE handle=?",  # noqa: S608
-        (json.dumps(person_data, ensure_ascii=False), birth_idx, death_idx,
-         person_data["change"], handle),
-    )
-
-
-def _write_object(conn: Any, table: str, handle: str, data: Dict) -> None:
-    """
-    Write any non-person object JSON back to DB, updating change timestamp.
-
-    Args:
-        conn: Open sqlite3.Connection within an active transaction.
-        table: Table name (e.g. 'family').
-        handle: Object handle.
-        data: Gramps JSON dict (mutated in place: sets change).
-    """
-    data["change"] = int(time.time())
-    conn.execute(
-        f"UPDATE {table} SET json_data=?, change=? WHERE handle=?",  # noqa: S608
-        (json.dumps(data, ensure_ascii=False), data["change"], handle),
-    )
-
-
-def _require_sqlite_db(db: Any, tool_name: str) -> GrampsSqliteDB:
-    """
-    Return a validated GrampsSqliteDB, fetching from get_client() if db is None.
-
-    Args:
-        db: Injected GrampsSqliteDB instance (None in production).
-        tool_name: Tool name for error messages.
-
-    Returns:
-        GrampsSqliteDB instance.
-
-    Raises:
-        GrampsAPIError: If backend is not SQLite.
-    """
-    if db is None:
-        from gramps_mcp.client import get_client
-        from gramps_mcp.sqlite_client import GrampsSqliteClient
-
-        client = get_client()
-        if not isinstance(client, GrampsSqliteClient):
-            raise GrampsAPIError(
-                f"{tool_name} is SQLite-only; Web backend is not supported"
-            )
-        db = client._db
-
-    if not isinstance(db, GrampsSqliteDB):
-        raise GrampsAPIError(
-            f"{tool_name} is SQLite-only; Web backend is not supported"
-        )
-    return db
+from gramps_mcp.tools._sqlite_helpers import (
+    _read_object,
+    _require_sqlite_db,
+    _resolve_handle,
+    _write_object,
+    _write_person,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +29,10 @@ def _require_sqlite_db(db: Any, tool_name: str) -> GrampsSqliteDB:
 
 
 async def add_event_to_person_tool(
-    person_handle: str,
-    event_handle: str,
+    person_handle: Optional[str] = None,
+    event_handle: Optional[str] = None,
+    person_gramps_id: Optional[str] = None,
+    event_gramps_id: Optional[str] = None,
     role: str = "Primary",
     db: Any = None,
 ) -> List[TextContent]:
@@ -134,18 +45,22 @@ async def add_event_to_person_tool(
     Args:
         person_handle: Handle of the person.
         event_handle: Handle of the event to link (must already exist).
+        person_gramps_id: Gramps ID of the person (alternative to person_handle).
+        event_gramps_id: Gramps ID of the event (alternative to event_handle).
         role: Role of the person in the event (default: 'Primary').
         db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
 
     Returns:
-        List[TextContent] with JSON result, person_handle, event_handle,
-        event_ref_count, birth_ref_index, death_ref_index.
+        List[TextContent] with JSON result.
 
     Raises:
-        GrampsAPIError: If backend is not SQLite or handles not found.
+        GrampsAPIError: If backend is not SQLite or objects not found.
     """
     db = _require_sqlite_db(db, "add_event_to_person")
     conn = db._conn
+
+    person_handle = _resolve_handle(conn, "person", person_handle, person_gramps_id, "Person")
+    event_handle = _resolve_handle(conn, "event", event_handle, event_gramps_id, "Event")
 
     person_data = _read_object(conn, "person", person_handle, "Person")
 
@@ -198,7 +113,76 @@ async def add_event_to_person_tool(
 
 
 # ---------------------------------------------------------------------------
-# Tool 2: remove_child_from_family
+# Tool 2: remove_event_from_person
+# ---------------------------------------------------------------------------
+
+
+async def remove_event_from_person_tool(
+    person_handle: Optional[str] = None,
+    event_handle: Optional[str] = None,
+    person_gramps_id: Optional[str] = None,
+    event_gramps_id: Optional[str] = None,
+    db: Any = None,
+) -> List[TextContent]:
+    """
+    Remove an event reference from a person's event_ref_list.
+
+    Automatically recalculates birth_ref_index and death_ref_index after
+    removal. Does not delete the event object itself. SQLite backend only.
+
+    Args:
+        person_handle: Handle of the person.
+        event_handle: Handle of the event to unlink.
+        person_gramps_id: Gramps ID of the person (alternative to person_handle).
+        event_gramps_id: Gramps ID of the event (alternative to event_handle).
+        db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
+
+    Returns:
+        List[TextContent] with JSON result, person_handle, event_handle,
+        event_ref_count, birth_ref_index, death_ref_index.
+
+    Raises:
+        GrampsAPIError: If backend is not SQLite, handles not found, or event
+                        not linked to this person.
+    """
+    db = _require_sqlite_db(db, "remove_event_from_person")
+    conn = db._conn
+
+    person_handle = _resolve_handle(conn, "person", person_handle, person_gramps_id, "Person")
+    event_handle = _resolve_handle(conn, "event", event_handle, event_gramps_id, "Event")
+
+    person_data = _read_object(conn, "person", person_handle, "Person")
+    event_ref_list = person_data.get("event_ref_list", [])
+
+    new_refs = [
+        e for e in event_ref_list
+        if not (isinstance(e, dict) and e.get("ref") == event_handle)
+    ]
+    if len(new_refs) == len(event_ref_list):
+        raise GrampsAPIError(
+            f"Event '{event_handle}' is not linked to person '{person_handle}'"
+        )
+
+    person_data["event_ref_list"] = new_refs
+
+    with conn:
+        _write_person(conn, person_handle, person_data)
+
+    return [TextContent(type="text", text=json.dumps(
+        {
+            "result": "ok",
+            "person_handle": person_handle,
+            "event_handle": event_handle,
+            "event_ref_count": len(new_refs),
+            "birth_ref_index": person_data.get("birth_ref_index", -1),
+            "death_ref_index": person_data.get("death_ref_index", -1),
+        },
+        ensure_ascii=False,
+    ))]
+
+
+# ---------------------------------------------------------------------------
+# Tool 3: remove_child_from_family
 # ---------------------------------------------------------------------------
 
 
@@ -264,7 +248,7 @@ async def remove_child_from_family_tool(
 
 
 # ---------------------------------------------------------------------------
-# Tool 3: move_attachment
+# Tool 4: move_attachment
 # ---------------------------------------------------------------------------
 
 

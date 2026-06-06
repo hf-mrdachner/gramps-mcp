@@ -455,3 +455,159 @@ class TestMoveAttachment:
                     db=db,
                 )
             )
+
+
+# ===========================================================================
+# add_event_to_person — gramps_id support
+# ===========================================================================
+
+class TestAddEventToPersonGrampsId:
+    def test_add_via_person_gramps_id(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_person_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        result = asyncio.run(
+            add_event_to_person_tool(
+                person_gramps_id="I0001", event_handle="h_ev", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+        assert data["event_ref_count"] == 1
+
+    def test_add_via_event_gramps_id(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_person_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        result = asyncio.run(
+            add_event_to_person_tool(
+                person_handle="h_pe", event_gramps_id="E0001", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+
+    def test_error_on_unknown_person_gramps_id(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_person_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        with pytest.raises(GrampsAPIError, match="gramps_id 'I9999' not found"):
+            asyncio.run(
+                add_event_to_person_tool(
+                    person_gramps_id="I9999", event_handle="h_ev", db=db
+                )
+            )
+
+    def test_error_when_neither_handle_nor_gramps_id(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_person_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+        _insert_event(conn, "h_ev", "E0001", 42)
+
+        with pytest.raises(GrampsAPIError, match="handle or gramps_id required"):
+            asyncio.run(
+                add_event_to_person_tool(event_handle="h_ev", db=db)
+            )
+
+
+# ===========================================================================
+# remove_event_from_person
+# ===========================================================================
+
+class TestRemoveEventFromPerson:
+    def test_event_removed_from_person(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_event_from_person_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev", "E0001", 42)
+        _insert_person(conn, "h_pe", "I0001", event_ref_list=[
+            {"_class": "EventRef", "ref": "h_ev",
+             "role": {"_class": "EventRoleType", "value": 1, "string": ""},
+             "private": False, "note_list": [], "attribute_list": []}
+        ])
+
+        result = asyncio.run(
+            remove_event_from_person_tool(
+                person_handle="h_pe", event_handle="h_ev", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+        assert data["event_ref_count"] == 0
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = 'h_pe'"
+        ).fetchone()
+        person_data = json.loads(row["json_data"])
+        refs = [e["ref"] for e in person_data.get("event_ref_list", [])]
+        assert "h_ev" not in refs
+
+    def test_birth_ref_index_reset_after_birth_event_removed(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_event_from_person_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_birth", "E0001", 12)  # Birth = 12
+        _insert_event(conn, "h_other", "E0002", 42)
+        _insert_person(conn, "h_pe", "I0001", event_ref_list=[
+            {"_class": "EventRef", "ref": "h_birth",
+             "role": {"_class": "EventRoleType", "value": 1, "string": ""},
+             "private": False, "note_list": [], "attribute_list": []},
+            {"_class": "EventRef", "ref": "h_other",
+             "role": {"_class": "EventRoleType", "value": 1, "string": ""},
+             "private": False, "note_list": [], "attribute_list": []},
+        ])
+        conn.execute("UPDATE person SET birth_ref_index = 0 WHERE handle = 'h_pe'")
+        conn.commit()
+
+        asyncio.run(
+            remove_event_from_person_tool(
+                person_handle="h_pe", event_handle="h_birth", db=db
+            )
+        )
+
+        row = conn.execute(
+            "SELECT birth_ref_index FROM person WHERE handle = 'h_pe'"
+        ).fetchone()
+        assert row["birth_ref_index"] == -1
+
+    def test_remove_via_gramps_ids(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_event_from_person_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev", "E0001", 42)
+        _insert_person(conn, "h_pe", "I0001", event_ref_list=[
+            {"_class": "EventRef", "ref": "h_ev",
+             "role": {"_class": "EventRoleType", "value": 1, "string": ""},
+             "private": False, "note_list": [], "attribute_list": []}
+        ])
+
+        result = asyncio.run(
+            remove_event_from_person_tool(
+                person_gramps_id="I0001", event_gramps_id="E0001", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+
+    def test_error_when_event_not_linked(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_event_from_person_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev", "E0001", 42)
+        _insert_person(conn, "h_pe", "I0001")
+
+        with pytest.raises(GrampsAPIError, match="not linked"):
+            asyncio.run(
+                remove_event_from_person_tool(
+                    person_handle="h_pe", event_handle="h_ev", db=db
+                )
+            )

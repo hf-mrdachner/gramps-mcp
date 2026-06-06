@@ -17,10 +17,14 @@
 """
 Unified interface for all MCP tools.
 
-This module exports all 24 genealogy tools organized by category:
-- Search & Discovery Tools (10)
-- Data Management Tools (9)
-- Analysis Tools (5)
+This module exports 36 genealogy tools organized by category:
+- Search & Discovery Tools (11): find_*, get_person, get_family
+- Data Management Tools (9): create_*
+- Analysis Tools (4): tree_stats, ancestors, descendants, recent_changes
+- Database Lifecycle Tools (3): list/open/close_database
+- Merge Tools (3): find_duplicate_persons, merge_persons, split_person
+- Link Edit Tools (4): add/remove_event_to/from_person, remove_child_from_family, move_attachment
+- Citation Link Tools (2): add/remove_citation_to/from_event
 """
 
 # Search & Discovery Tools (10 tools)
@@ -69,6 +73,16 @@ from .search_details import (
     get_family_tool,
     get_person_tool,
 )
+from .link_edit import (
+    add_event_to_person_tool,
+    move_attachment_tool,
+    remove_child_from_family_tool,
+    remove_event_from_person_tool,
+)
+from .citation_link import (
+    add_citation_to_event_tool,
+    remove_citation_from_event_tool,
+)
 
 # Export all tools for easy import
 __all__ = [
@@ -107,4 +121,12 @@ __all__ = [
     "find_duplicate_persons_tool",
     "merge_persons_tool",
     "split_person_tool",
+    # Link Edit Tools (SQLite backend only)
+    "add_event_to_person_tool",
+    "move_attachment_tool",
+    "remove_child_from_family_tool",
+    "remove_event_from_person_tool",
+    # Citation Link Tools (SQLite backend only)
+    "add_citation_to_event_tool",
+    "remove_citation_from_event_tool",
 ]
