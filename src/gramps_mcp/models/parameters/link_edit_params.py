@@ -56,6 +56,23 @@ class AddEventToFamilyParams(BaseModel):
     )
 
 
+class RemoveEventFromFamilyParams(BaseModel):
+    """Parameters for remove_event_from_family tool."""
+
+    family_handle: Optional[str] = Field(
+        None, description="Handle of the family"
+    )
+    family_gramps_id: Optional[str] = Field(
+        None, description="Gramps ID of the family (e.g. 'F0042'). Alternative to family_handle."
+    )
+    event_handle: Optional[str] = Field(
+        None, description="Handle of the event to unlink"
+    )
+    event_gramps_id: Optional[str] = Field(
+        None, description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle."
+    )
+
+
 class RemoveChildFromFamilyParams(BaseModel):
     """Parameters for remove_child_from_family tool."""
 

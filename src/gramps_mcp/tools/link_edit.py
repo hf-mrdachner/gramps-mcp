@@ -12,9 +12,9 @@ from typing import Any, List, Optional
 
 from mcp.types import TextContent
 
-from gramps_mcp._gramps_sqlite import _denorm_type
 from gramps_mcp.client import GrampsAPIError
 from gramps_mcp.tools._sqlite_helpers import (
+    _make_event_ref,
     _read_object,
     _require_sqlite_db,
     _resolve_handle,
@@ -64,6 +64,9 @@ async def add_event_to_person_tool(
 
     person_data = _read_object(conn, "person", person_handle, "Person")
 
+    # _resolve_handle only confirms existence when gramps_id is given; when a
+    # raw handle is passed directly it returns it without a DB lookup, so we
+    # must verify the event exists here in both code paths.
     if not conn.execute(
         "SELECT handle FROM event WHERE handle = ?",  # noqa: S608
         (event_handle,),
@@ -84,15 +87,7 @@ async def add_event_to_person_tool(
             ensure_ascii=False,
         ))]
 
-    new_ref = {
-        "_class": "EventRef",
-        "ref": event_handle,
-        "role": _denorm_type(role, "EventRoleType"),
-        "private": False,
-        "note_list": [],
-        "attribute_list": [],
-    }
-    event_ref_list.append(new_ref)
+    event_ref_list.append(_make_event_ref(event_handle, role))
     person_data["event_ref_list"] = event_ref_list
 
     with conn:
@@ -152,6 +147,8 @@ async def add_event_to_family_tool(
 
     family_data = _read_object(conn, "family", family_handle, "Family")
 
+    # Same rationale as add_event_to_person: _resolve_handle skips the DB lookup
+    # when a raw handle is given, so we verify event existence explicitly here.
     if not conn.execute(
         "SELECT handle FROM event WHERE handle = ?",  # noqa: S608
         (event_handle,),
@@ -160,9 +157,9 @@ async def add_event_to_family_tool(
 
     event_ref_list = family_data.get("event_ref_list", [])
 
-    existing_handles = [
-        e.get("ref") for e in event_ref_list if isinstance(e, dict)
-    ]
+    existing_handles = {
+        e.get("ref") for e in event_ref_list if isinstance(e, dict) and e.get("ref")
+    }
     if event_handle in existing_handles:
         return [TextContent(type="text", text=json.dumps(
             {
@@ -172,16 +169,76 @@ async def add_event_to_family_tool(
             ensure_ascii=False,
         ))]
 
-    new_ref = {
-        "_class": "EventRef",
-        "ref": event_handle,
-        "role": _denorm_type(role, "EventRoleType"),
-        "private": False,
-        "note_list": [],
-        "attribute_list": [],
-    }
-    event_ref_list.append(new_ref)
+    event_ref_list.append(_make_event_ref(event_handle, role))
     family_data["event_ref_list"] = event_ref_list
+
+    with conn:
+        _write_object(conn, "family", family_handle, family_data)
+
+    valid_ref_count = sum(1 for e in event_ref_list if isinstance(e, dict) and e.get("ref"))
+    return [TextContent(type="text", text=json.dumps(
+        {
+            "result": "ok",
+            "family_handle": family_handle,
+            "event_handle": event_handle,
+            "role": role,
+            "event_ref_count": valid_ref_count,
+        },
+        ensure_ascii=False,
+    ))]
+
+
+# ---------------------------------------------------------------------------
+# Tool 3: remove_event_from_family
+# ---------------------------------------------------------------------------
+
+
+async def remove_event_from_family_tool(
+    family_handle: Optional[str] = None,
+    event_handle: Optional[str] = None,
+    family_gramps_id: Optional[str] = None,
+    event_gramps_id: Optional[str] = None,
+    db: Any = None,
+) -> List[TextContent]:
+    """
+    Remove an event reference from a family's event_ref_list.
+
+    Does not delete the event object itself. SQLite backend only.
+
+    Args:
+        family_handle: Handle of the family.
+        event_handle: Handle of the event to unlink.
+        family_gramps_id: Gramps ID of the family (alternative to family_handle).
+        event_gramps_id: Gramps ID of the event (alternative to event_handle).
+        db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
+
+    Returns:
+        List[TextContent] with JSON result, family_handle, event_handle,
+        event_ref_count.
+
+    Raises:
+        GrampsAPIError: If backend is not SQLite, handles not found, or event
+                        not linked to this family.
+    """
+    db = _require_sqlite_db(db, "remove_event_from_family")
+    conn = db._conn
+
+    family_handle = _resolve_handle(conn, "family", family_handle, family_gramps_id, "Family")
+    event_handle = _resolve_handle(conn, "event", event_handle, event_gramps_id, "Event")
+
+    family_data = _read_object(conn, "family", family_handle, "Family")
+    event_ref_list = family_data.get("event_ref_list", [])
+
+    new_refs = [
+        e for e in event_ref_list
+        if not (isinstance(e, dict) and e.get("ref") == event_handle)
+    ]
+    if len(new_refs) == len(event_ref_list):
+        raise GrampsAPIError(
+            f"Event '{event_handle}' is not linked to family '{family_handle}'"
+        )
+
+    family_data["event_ref_list"] = new_refs
 
     with conn:
         _write_object(conn, "family", family_handle, family_data)
@@ -191,15 +248,14 @@ async def add_event_to_family_tool(
             "result": "ok",
             "family_handle": family_handle,
             "event_handle": event_handle,
-            "role": role,
-            "event_ref_count": len(event_ref_list),
+            "event_ref_count": len(new_refs),
         },
         ensure_ascii=False,
     ))]
 
 
 # ---------------------------------------------------------------------------
-# Tool 3: remove_event_from_person
+# Tool 4: remove_event_from_person
 # ---------------------------------------------------------------------------
 
 

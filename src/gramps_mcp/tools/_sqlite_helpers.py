@@ -8,7 +8,7 @@ import json
 import time
 from typing import Any, Dict, Optional
 
-from gramps_mcp._gramps_sqlite import GrampsSqliteDB, _compute_birth_death_indices
+from gramps_mcp._gramps_sqlite import GrampsSqliteDB, _compute_birth_death_indices, _denorm_type
 from gramps_mcp.client import GrampsAPIError
 
 _VALID_TABLES: frozenset[str] = frozenset({
@@ -59,7 +59,7 @@ def _write_person(conn: Any, handle: str, person_data: Dict) -> None:
     )
     person_data["birth_ref_index"] = birth_idx
     person_data["death_ref_index"] = death_idx
-    conn.execute(
+    cursor = conn.execute(
         "UPDATE person SET json_data=?, birth_ref_index=?, death_ref_index=?, change=? "
         "WHERE handle=?",  # noqa: S608
         (
@@ -70,6 +70,8 @@ def _write_person(conn: Any, handle: str, person_data: Dict) -> None:
             handle,
         ),
     )
+    if cursor.rowcount == 0:
+        raise GrampsAPIError(f"Person with handle '{handle}' not found")
 
 
 def _write_object(conn: Any, table: str, handle: str, data: Dict) -> None:
@@ -85,10 +87,33 @@ def _write_object(conn: Any, table: str, handle: str, data: Dict) -> None:
     if table not in _VALID_TABLES:
         raise GrampsAPIError(f"Invalid table name: '{table}'")
     data["change"] = int(time.time())
-    conn.execute(
+    cursor = conn.execute(
         f"UPDATE {table} SET json_data=?, change=? WHERE handle=?",  # noqa: S608
         (json.dumps(data, ensure_ascii=False), data["change"], handle),
     )
+    if cursor.rowcount == 0:
+        raise GrampsAPIError(f"{table.title()} with handle '{handle}' not found")
+
+
+def _make_event_ref(event_handle: str, role: str) -> dict:
+    """
+    Build a Gramps EventRef dict for insertion into an event_ref_list.
+
+    Args:
+        event_handle: Handle of the event to reference.
+        role: Human-readable role string (e.g. 'Primary', 'Family').
+
+    Returns:
+        Dict conforming to the Gramps EventRef JSON schema.
+    """
+    return {
+        "_class": "EventRef",
+        "ref": event_handle,
+        "role": _denorm_type(role, "EventRoleType"),
+        "private": False,
+        "note_list": [],
+        "attribute_list": [],
+    }
 
 
 def _require_sqlite_db(db: Any, tool_name: str) -> GrampsSqliteDB:
