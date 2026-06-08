@@ -125,7 +125,7 @@ class TestParameterAlignment:
         assert not extra_required, f"EventSaveParams has extra required fields: {extra_required}"
         
         # Check fields match current implementation
-        implementation_fields = required_fields | {'handle', 'date', 'description', 'place', 'note_list'}
+        implementation_fields = required_fields | {'handle', 'gramps_id', 'date', 'description', 'place', 'note_list'}
         actual_fields = set(fields.keys())
         extra_fields = actual_fields - implementation_fields
         assert not extra_fields, f"EventSaveParams has extra fields: {extra_fields}"

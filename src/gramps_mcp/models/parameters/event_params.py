@@ -47,6 +47,10 @@ class EventSaveParams(BaseModel):
     handle: Optional[str] = Field(
         None, description="Event's handle (for updates; omit for new event)"
     )
+    gramps_id: Optional[str] = Field(
+        None,
+        description="Event's Gramps ID for updates (e.g. 'E0001'). Alternative to handle.",
+    )
     type: str = Field(description="Event type (Birth, Death, Marriage, etc.)")
     date: Optional[Dict[str, Any]] = Field(
         None,
