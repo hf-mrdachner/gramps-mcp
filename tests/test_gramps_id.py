@@ -179,6 +179,32 @@ class TestCreateCitationToolGramsId:
         assert "not found" not in text.lower() or "S0001" in text
 
 
+class TestCreateNoteToolGramsId:
+    async def test_update_via_gramps_id_resolves_to_existing_handle(self, monkeypatch, sqlite_client):
+        """gramps_id on NoteSaveParams must resolve to the existing handle (update, not create)."""
+        import gramps_mcp.tools.data_management as dm
+        monkeypatch.setattr(dm, "get_client", lambda: sqlite_client)
+        result = await dm.create_note_tool(
+            {"gramps_id": "N0001", "text": "Updated note text", "type": "General"}
+        )
+        text = " ".join(r.text for r in result)
+        assert "updated" in text.lower()
+        assert "h_no_john" in text
+
+
+class TestCreateMediaToolGramsId:
+    async def test_update_via_gramps_id_resolves_to_existing_handle(self, monkeypatch, sqlite_client):
+        """gramps_id on MediaSaveParams must resolve to the existing handle (update, not create)."""
+        import gramps_mcp.tools.data_management as dm
+        monkeypatch.setattr(dm, "get_client", lambda: sqlite_client)
+        result = await dm.create_media_tool(
+            {"gramps_id": "O0001", "desc": "Updated description"}
+        )
+        text = " ".join(r.text for r in result)
+        assert "updated" in text.lower()
+        assert "h_me_photo" in text
+
+
 # ---------------------------------------------------------------------------
 # Tool integration — link_edit gramps_id resolution
 # ---------------------------------------------------------------------------

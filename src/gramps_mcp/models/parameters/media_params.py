@@ -56,6 +56,10 @@ class MediaSaveParams(BaseModel):
     """Parameters for creating or updating a media item."""
 
     handle: Optional[str] = Field(None, description="Media handle for updates")
+    gramps_id: Optional[str] = Field(
+        None,
+        description="Media's Gramps ID for updates (e.g. 'O0001'). Alternative to handle.",
+    )
     desc: str = Field(..., description="Media description")
     path: Optional[str] = Field(
         None, min_length=1, description="File path or URL to media"

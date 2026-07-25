@@ -24,7 +24,7 @@ API calls supported in this category:
 - DELETE_NOTE: Delete the note
 """
 
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -63,6 +63,10 @@ class NoteSaveParams(BaseModel):
     handle: str | None = Field(
         None,
         description="Note's handle (for updates; omit for new note)",
+    )
+    gramps_id: Optional[str] = Field(
+        None,
+        description="Note's Gramps ID for updates (e.g. 'N0001'). Alternative to handle.",
     )
     text: str = Field(..., description="Note text content")
     type: str = Field(..., description="The type of note")
