@@ -64,7 +64,20 @@ class EventSaveParams(BaseModel):
     description: Optional[str] = Field(None, description="Event description")
     place: Optional[str] = Field(None, description="Place handle where event occurred")
     citation_list: List[str] = Field(..., description="List of citation handles")
+    citation_gramps_id_list: Optional[List[str]] = Field(
+        None,
+        description=(
+            "List of citation Gramps IDs (e.g. ['C0001']). "
+            "Alternative to citation_list."
+        ),
+    )
     note_list: Optional[List[str]] = Field(None, description="List of note handles")
+    note_gramps_id_list: Optional[List[str]] = Field(
+        None,
+        description=(
+            "List of note Gramps IDs (e.g. ['N0001']). Alternative to note_list."
+        ),
+    )
 
 
 class EventSpanParams(BaseModel):

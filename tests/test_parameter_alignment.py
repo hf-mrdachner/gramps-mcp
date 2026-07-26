@@ -126,8 +126,10 @@ class TestParameterAlignment:
         
         # Check fields match current implementation
         implementation_fields = required_fields | {'handle', 'gramps_id', 'date', 'description', 'place', 'note_list'}
+        gramps_id_fields = {'citation_gramps_id_list', 'note_gramps_id_list'}
+        allowed_fields = implementation_fields | gramps_id_fields
         actual_fields = set(fields.keys())
-        extra_fields = actual_fields - implementation_fields
+        extra_fields = actual_fields - allowed_fields
         assert not extra_fields, f"EventSaveParams has extra fields: {extra_fields}"
 
     def test_person_parameters_alignment(self):
