@@ -268,6 +268,15 @@ class TestSimilarityScore:
         score, _ = similarity_score(p1, p2, 1830, 1830)
         assert score == 0
 
+    def test_both_birth_years_missing_penalized_more_than_one_missing(self):
+        # Base (gender+surname+given, no birth info at all) = 1 + 3 + 4 = 8
+        p = self._make("Hans", "Mueller")
+        score_one_missing, _ = similarity_score(p, p, 1830, None)
+        score_both_missing, _ = similarity_score(p, p, None, None)
+        assert score_both_missing == 6.0  # base(8) - 2 penalty
+        assert score_one_missing == 7.0  # base(8) - 1 penalty (unchanged)
+        assert score_both_missing < score_one_missing
+
 
 # ---------------------------------------------------------------------------
 # 3. find_duplicate_persons
@@ -293,6 +302,371 @@ class TestFindDuplicatePersons:
     def test_limit_respected(self, db):
         candidates = find_duplicate_persons(db, limit=1)
         assert len(candidates) <= 1
+
+
+# ---------------------------------------------------------------------------
+# 3b. find_duplicate_persons — direct relatives must not be proposed
+#
+# Regression: a father and son sharing the same given+surname (common in
+# historical records) with no recorded birth years used to score 8
+# (gender+surname+given) and pass min_score, since the missing-birth-year
+# case wasn't penalized and no check excluded already-connected relatives.
+# ---------------------------------------------------------------------------
+
+def _make_same_name_family_db(relation: str) -> sqlite3.Connection:
+    """
+    In-memory DB with two same-named "Hans Schmidt" persons and no birth
+    events, connected either as parent/child or as spouses via one family.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(_SCHEMA)
+
+    # Same gender on both sides so the pre-existing gender check can't mask
+    # whether the new family-relation exclusion actually fired.
+    p_a = _person("h_a", "I_A", "Hans", "Schmidt", 1, [])
+    p_b = _person("h_b", "I_B", "Hans", "Schmidt", 1, [])
+
+    if relation == "parent_child":
+        p_a["family_list"] = ["h_fam"]
+        p_b["parent_family_list"] = ["h_fam"]
+        fam = {
+            "_class": "Family", "handle": "h_fam", "gramps_id": "F0001",
+            "father_handle": "h_a", "mother_handle": None,
+            "child_ref_list": [_cref("h_b")],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+    else:  # spouses
+        p_a["family_list"] = ["h_fam"]
+        p_b["family_list"] = ["h_fam"]
+        fam = {
+            "_class": "Family", "handle": "h_fam", "gramps_id": "F0001",
+            "father_handle": "h_a", "mother_handle": "h_b",
+            "child_ref_list": [],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+
+    conn.execute(
+        "INSERT INTO family (handle, gramps_id, json_data, father_handle, mother_handle) "
+        "VALUES (?,?,?,?,?)",
+        [fam["handle"], fam["gramps_id"], json.dumps(fam),
+         fam["father_handle"], fam["mother_handle"]],
+    )
+    _insert_person(conn, "Hans", "Schmidt", 1, p_a)
+    _insert_person(conn, "Hans", "Schmidt", 1, p_b)
+    conn.commit()
+    return conn
+
+
+class TestFindDuplicatePersonsExcludesDirectRelatives:
+    def test_parent_child_same_name_not_proposed(self):
+        conn = _make_same_name_family_db("parent_child")
+        candidates = find_duplicate_persons(conn)
+        ids = {frozenset([c.winner_id, c.loser_id]) for c in candidates}
+        assert frozenset(["I_A", "I_B"]) not in ids
+
+    def test_spouses_same_surname_not_proposed(self):
+        conn = _make_same_name_family_db("spouses")
+        candidates = find_duplicate_persons(conn)
+        ids = {frozenset([c.winner_id, c.loser_id]) for c in candidates}
+        assert frozenset(["I_A", "I_B"]) not in ids
+
+
+# ---------------------------------------------------------------------------
+# 3b2. find_duplicate_persons — two-hop relatives (grandparent/grandchild,
+# uncle/nephew) must also be excluded, not just direct (one-hop) relatives.
+#
+# Naming-after-a-relative is a common historical pattern, so a same-named
+# grandparent/grandchild pair otherwise scores high enough on name alone
+# (no birth years needed) to clear the default min_score - the one-hop
+# exclusion above doesn't catch this since they aren't direct neighbors.
+# ---------------------------------------------------------------------------
+
+class TestFindDuplicatePersonsExcludesTwoHopRelatives:
+    def test_grandparent_grandchild_same_name_not_proposed(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(_SCHEMA)
+
+        p_gp = _person("h_gp", "I_GP", "Hans", "Schmidt", 1, [])
+        p_gp["family_list"] = ["h_fam1"]
+        p_gm = _person("h_gm", "I_GM", "Anna", "Schmidt", 0, [])
+        p_gm["family_list"] = ["h_fam1"]
+        p_f = _person("h_f", "I_F", "Peter", "Schmidt", 1, [])
+        p_f["parent_family_list"] = ["h_fam1"]
+        p_f["family_list"] = ["h_fam2"]
+        p_m = _person("h_m", "I_M", "Maria", "Mueller", 0, [])
+        p_m["family_list"] = ["h_fam2"]
+        p_gc = _person("h_gc", "I_GC", "Hans", "Schmidt", 1, [])
+        p_gc["parent_family_list"] = ["h_fam2"]
+
+        fam1 = {
+            "_class": "Family", "handle": "h_fam1", "gramps_id": "F0001",
+            "father_handle": "h_gp", "mother_handle": "h_gm",
+            "child_ref_list": [_cref("h_f")],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        fam2 = {
+            "_class": "Family", "handle": "h_fam2", "gramps_id": "F0002",
+            "father_handle": "h_f", "mother_handle": "h_m",
+            "child_ref_list": [_cref("h_gc")],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        for fam in (fam1, fam2):
+            conn.execute(
+                "INSERT INTO family (handle, gramps_id, json_data, father_handle, mother_handle) "
+                "VALUES (?,?,?,?,?)",
+                [fam["handle"], fam["gramps_id"], json.dumps(fam),
+                 fam["father_handle"], fam["mother_handle"]],
+            )
+        _insert_person(conn, "Hans", "Schmidt", 1, p_gp)
+        _insert_person(conn, "Anna", "Schmidt", 0, p_gm)
+        _insert_person(conn, "Peter", "Schmidt", 1, p_f)
+        _insert_person(conn, "Maria", "Mueller", 0, p_m)
+        _insert_person(conn, "Hans", "Schmidt", 1, p_gc)
+        conn.commit()
+
+        # Default min_score - name-only match (score 6) would otherwise
+        # clear it on its own, with no family bonus needed at all.
+        candidates = find_duplicate_persons(conn)
+        ids = {frozenset([c.winner_id, c.loser_id]) for c in candidates}
+        assert frozenset(["I_GP", "I_GC"]) not in ids
+
+    def test_uncle_nephew_same_name_not_proposed(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(_SCHEMA)
+
+        # Grandparents -> two children: uncle (h_u) and nephew's parent (h_p)
+        p_gp = _person("h_gp2", "I_GP2", "Karl", "Weber", 1, [])
+        p_gp["family_list"] = ["h_famG"]
+        p_gm = _person("h_gm2", "I_GM2", "Erna", "Weber", 0, [])
+        p_gm["family_list"] = ["h_famG"]
+        p_u = _person("h_u", "I_U", "Hans", "Weber", 1, [])
+        p_u["parent_family_list"] = ["h_famG"]
+        p_p = _person("h_p", "I_P", "Fritz", "Weber", 1, [])
+        p_p["parent_family_list"] = ["h_famG"]
+        p_p["family_list"] = ["h_famN"]
+        p_pm = _person("h_pm", "I_PM", "Klara", "Bauer", 0, [])
+        p_pm["family_list"] = ["h_famN"]
+        p_n = _person("h_n", "I_N", "Hans", "Weber", 1, [])
+        p_n["parent_family_list"] = ["h_famN"]
+
+        famG = {
+            "_class": "Family", "handle": "h_famG", "gramps_id": "F0010",
+            "father_handle": "h_gp2", "mother_handle": "h_gm2",
+            "child_ref_list": [_cref("h_u"), _cref("h_p")],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        famN = {
+            "_class": "Family", "handle": "h_famN", "gramps_id": "F0011",
+            "father_handle": "h_p", "mother_handle": "h_pm",
+            "child_ref_list": [_cref("h_n")],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        for fam in (famG, famN):
+            conn.execute(
+                "INSERT INTO family (handle, gramps_id, json_data, father_handle, mother_handle) "
+                "VALUES (?,?,?,?,?)",
+                [fam["handle"], fam["gramps_id"], json.dumps(fam),
+                 fam["father_handle"], fam["mother_handle"]],
+            )
+        _insert_person(conn, "Karl", "Weber", 1, p_gp)
+        _insert_person(conn, "Erna", "Weber", 0, p_gm)
+        _insert_person(conn, "Hans", "Weber", 1, p_u)
+        _insert_person(conn, "Fritz", "Weber", 1, p_p)
+        _insert_person(conn, "Klara", "Bauer", 0, p_pm)
+        _insert_person(conn, "Hans", "Weber", 1, p_n)
+        conn.commit()
+
+        candidates = find_duplicate_persons(conn)
+        ids = {frozenset([c.winner_id, c.loser_id]) for c in candidates}
+        assert frozenset(["I_U", "I_N"]) not in ids
+
+    def test_three_hop_relatives_still_proposed(self):
+        """Boundary check: great-grandparent/great-grandchild (3 hops) is
+        deliberately NOT excluded - the cutoff is 2 hops."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(_SCHEMA)
+
+        p_ggp = _person("h_ggp", "I_GGP", "Hans", "Schmidt", 1, [])
+        p_ggp["family_list"] = ["h_fam1"]
+        p_f1 = _person("h_f1", "I_F1", "Peter", "Schmidt", 1, [])
+        p_f1["parent_family_list"] = ["h_fam1"]
+        p_f1["family_list"] = ["h_fam2"]
+        p_f2 = _person("h_f2", "I_F2", "Paul", "Schmidt", 1, [])
+        p_f2["parent_family_list"] = ["h_fam2"]
+        p_f2["family_list"] = ["h_fam3"]
+        p_ggc = _person("h_ggc", "I_GGC", "Hans", "Schmidt", 1, [])
+        p_ggc["parent_family_list"] = ["h_fam3"]
+
+        fam1 = {
+            "_class": "Family", "handle": "h_fam1", "gramps_id": "F0020",
+            "father_handle": "h_ggp", "mother_handle": None,
+            "child_ref_list": [_cref("h_f1")], "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        fam2 = {
+            "_class": "Family", "handle": "h_fam2", "gramps_id": "F0021",
+            "father_handle": "h_f1", "mother_handle": None,
+            "child_ref_list": [_cref("h_f2")], "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        fam3 = {
+            "_class": "Family", "handle": "h_fam3", "gramps_id": "F0022",
+            "father_handle": "h_f2", "mother_handle": None,
+            "child_ref_list": [_cref("h_ggc")], "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        for fam in (fam1, fam2, fam3):
+            conn.execute(
+                "INSERT INTO family (handle, gramps_id, json_data, father_handle, mother_handle) "
+                "VALUES (?,?,?,?,?)",
+                [fam["handle"], fam["gramps_id"], json.dumps(fam),
+                 fam["father_handle"], fam["mother_handle"]],
+            )
+        _insert_person(conn, "Hans", "Schmidt", 1, p_ggp)
+        _insert_person(conn, "Peter", "Schmidt", 1, p_f1)
+        _insert_person(conn, "Paul", "Schmidt", 1, p_f2)
+        _insert_person(conn, "Hans", "Schmidt", 1, p_ggc)
+        conn.commit()
+
+        candidates = find_duplicate_persons(conn)
+        ids = {frozenset([c.winner_id, c.loser_id]) for c in candidates}
+        assert frozenset(["I_GGP", "I_GGC"]) in ids
+
+
+# ---------------------------------------------------------------------------
+# 3c. find_duplicate_persons — family bonus must be role-aware
+#
+# A shared neighbor is not by itself duplicate evidence: a grandparent and
+# grandchild both touch the connecting parent, but in mismatched roles
+# (child vs. parent). Only a *same-role* overlap (both list the identical
+# handle as PARENT, as SPOUSE, or as CHILD) is real duplicate evidence -
+# e.g. a family entered twice, each copy holding one of the two child
+# records that should be merged.
+# ---------------------------------------------------------------------------
+
+class TestFamilyBonusIsRoleAware:
+    def test_grandparent_grandchild_connector_not_boosted(self):
+        """GP and GC share connector F (GP's child, GC's parent) - mismatched
+        roles must not count toward the family bonus."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(_SCHEMA)
+
+        p_gp = _person("h_gp", "I_GP", "Hans", "Schmidt", 1, [])
+        p_gp["family_list"] = ["h_fam1"]
+        p_gm = _person("h_gm", "I_GM", "Anna", "Schmidt", 0, [])
+        p_gm["family_list"] = ["h_fam1"]
+        p_f = _person("h_f", "I_F", "Peter", "Schmidt", 1, [])
+        p_f["parent_family_list"] = ["h_fam1"]
+        p_f["family_list"] = ["h_fam2"]
+        p_m = _person("h_m", "I_M", "Maria", "Mueller", 0, [])
+        p_m["family_list"] = ["h_fam2"]
+        p_gc = _person("h_gc", "I_GC", "Hans", "Schmidt", 1, [])
+        p_gc["parent_family_list"] = ["h_fam2"]
+
+        fam1 = {
+            "_class": "Family", "handle": "h_fam1", "gramps_id": "F0001",
+            "father_handle": "h_gp", "mother_handle": "h_gm",
+            "child_ref_list": [_cref("h_f")],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        fam2 = {
+            "_class": "Family", "handle": "h_fam2", "gramps_id": "F0002",
+            "father_handle": "h_f", "mother_handle": "h_m",
+            "child_ref_list": [_cref("h_gc")],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        for fam in (fam1, fam2):
+            conn.execute(
+                "INSERT INTO family (handle, gramps_id, json_data, father_handle, mother_handle) "
+                "VALUES (?,?,?,?,?)",
+                [fam["handle"], fam["gramps_id"], json.dumps(fam),
+                 fam["father_handle"], fam["mother_handle"]],
+            )
+        _insert_person(conn, "Hans", "Schmidt", 1, p_gp)
+        _insert_person(conn, "Anna", "Schmidt", 0, p_gm)
+        _insert_person(conn, "Peter", "Schmidt", 1, p_f)
+        _insert_person(conn, "Maria", "Mueller", 0, p_m)
+        _insert_person(conn, "Hans", "Schmidt", 1, p_gc)
+        conn.commit()
+
+        # Base score (gender+surname+given match, no birth years) = 6 < 7.
+        # A buggy role-blind bonus (+3 for the shared connector F) would
+        # push this to 9 and wrongly propose the pair.
+        candidates = find_duplicate_persons(conn, min_score=7.0)
+        ids = {frozenset([c.winner_id, c.loser_id]) for c in candidates}
+        assert frozenset(["I_GP", "I_GC"]) not in ids
+
+    def test_shared_parents_still_boosted(self):
+        """Two same-named children of the SAME father+mother, entered under
+        two separate family records, share both parents in matching role -
+        that is real duplicate-family evidence and must still be boosted."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(_SCHEMA)
+
+        p_x = _person("h_x", "I_X", "Karl", "Schmidt", 1, [])
+        p_y = _person("h_y", "I_Y", "Erna", "Meier", 0, [])
+        p_1 = _person("h_p1", "I_P1", "Hans", "Schmidt", 1, [])
+        p_1["parent_family_list"] = ["h_famA"]
+        p_2 = _person("h_p2", "I_P2", "Hans", "Schmidt", 1, [])
+        p_2["parent_family_list"] = ["h_famB"]
+
+        famA = {
+            "_class": "Family", "handle": "h_famA", "gramps_id": "F0001",
+            "father_handle": "h_x", "mother_handle": "h_y",
+            "child_ref_list": [_cref("h_p1")],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        famB = {
+            "_class": "Family", "handle": "h_famB", "gramps_id": "F0002",
+            "father_handle": "h_x", "mother_handle": "h_y",
+            "child_ref_list": [_cref("h_p2")],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        for fam in (famA, famB):
+            conn.execute(
+                "INSERT INTO family (handle, gramps_id, json_data, father_handle, mother_handle) "
+                "VALUES (?,?,?,?,?)",
+                [fam["handle"], fam["gramps_id"], json.dumps(fam),
+                 fam["father_handle"], fam["mother_handle"]],
+            )
+        _insert_person(conn, "Karl", "Schmidt", 1, p_x)
+        _insert_person(conn, "Erna", "Meier", 0, p_y)
+        _insert_person(conn, "Hans", "Schmidt", 1, p_1)
+        _insert_person(conn, "Hans", "Schmidt", 1, p_2)
+        conn.commit()
+
+        candidates = find_duplicate_persons(conn, min_score=7.0)
+        ids = {frozenset([c.winner_id, c.loser_id]) for c in candidates}
+        assert frozenset(["I_P1", "I_P2"]) in ids
 
 
 # ---------------------------------------------------------------------------
