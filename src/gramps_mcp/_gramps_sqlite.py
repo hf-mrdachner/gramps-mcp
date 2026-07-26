@@ -930,8 +930,10 @@ def _denorm_child_ref(cref: Any) -> Any:
     result.setdefault("_class", "ChildRef")
     if isinstance(result.get("frel"), str):
         result["frel"] = _denorm_type(result["frel"], "ChildRefType")
+    result.setdefault("frel", {"_class": "ChildRefType", "value": 1, "string": ""})
     if isinstance(result.get("mrel"), str):
         result["mrel"] = _denorm_type(result["mrel"], "ChildRefType")
+    result.setdefault("mrel", {"_class": "ChildRefType", "value": 1, "string": ""})
     result.setdefault("private", False)
     result.setdefault("citation_list", [])
     result.setdefault("note_list", [])

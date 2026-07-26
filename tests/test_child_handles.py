@@ -79,6 +79,33 @@ class TestMergeIntoChildHandles:
             assert cr["_class"] == "ChildRef"
             assert cr["private"] is False
 
+    def test_child_ref_entries_have_frel_and_mrel(self):
+        """
+        BUG: ChildRef entries created from a bare {"ref": handle} dict (as
+        produced by the child_handles convenience key) were written without
+        "frel"/"mrel" keys at all.
+
+        Gramps desktop deserialises family JSON via
+        gramps.gen.lib.json_utils.convert_state_to_object(), which builds the
+        object with cls.__new__(cls) (skipping __init__, so no default
+        ChildRefType() is set) and then only assigns attributes present in
+        the dict. A missing "mrel"/"frel" key therefore means the attribute
+        is entirely absent on the resulting ChildRef object, and any code
+        that reads child_ref.mrel (e.g. gramps/plugins/view/pedigreeview.py)
+        crashes with AttributeError: 'ChildRef' object has no attribute
+        'mrel'.
+        """
+        base = {"_class": "Family", "child_ref_list": []}
+        patch = {"child_handles": ["handle_a"]}
+
+        _merge_into(base, patch, "family")
+
+        cr = base["child_ref_list"][0]
+        assert "frel" in cr, "ChildRef entry is missing frel key entirely"
+        assert "mrel" in cr, "ChildRef entry is missing mrel key entirely"
+        assert cr["frel"]["_class"] == "ChildRefType"
+        assert cr["mrel"]["_class"] == "ChildRefType"
+
     def test_empty_child_handles_clears_child_ref_list(self):
         base = {
             "_class": "Family",
@@ -135,3 +162,11 @@ class TestPutFamilyWithChildHandles:
         assert len(raw["child_ref_list"]) >= 1
         assert raw["child_ref_list"][0]["ref"] == "fake_handle_1"
         assert raw["child_ref_list"][0]["_class"] == "ChildRef"
+        assert "frel" in raw["child_ref_list"][0], (
+            "ChildRef persisted without frel would crash Gramps desktop "
+            "with AttributeError on load (missing attribute, not None)"
+        )
+        assert "mrel" in raw["child_ref_list"][0], (
+            "ChildRef persisted without mrel would crash Gramps desktop "
+            "with AttributeError on load (missing attribute, not None)"
+        )
