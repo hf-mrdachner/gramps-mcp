@@ -27,6 +27,12 @@ class TestGramsIdFieldNaming:
     def test_from_handle(self):
         assert _gramps_id_field("from_handle") == "from_gramps_id"
 
+    def test_citation_list(self):
+        assert _gramps_id_field("citation_list") == "citation_gramps_id_list"
+
+    def test_note_list(self):
+        assert _gramps_id_field("note_list") == "note_gramps_id_list"
+
 
 class TestResolveHandle:
     async def test_resolves_person_gramps_id(self, sqlite_client):
@@ -83,6 +89,13 @@ class TestResolveHandles:
         args = {"gramps_id": "I0002"}
         result = await resolve_handles(args, {"handle": "person"}, sqlite_client)
         assert result is not args
+
+    async def test_list_suffix_resolved_element_wise(self, sqlite_client):
+        args = {"citation_gramps_id_list": ["C0001"]}
+        result = await resolve_handles(
+            args, {"citation_list": "citation"}, sqlite_client
+        )
+        assert result["citation_list"] == ["h_ci_birth"]
 
 
 # ---------------------------------------------------------------------------
@@ -267,3 +280,54 @@ class TestCrudGramsIdResolution:
         })
         text = " ".join(r.text for r in result)
         assert "updated" in text.lower(), f"Expected 'updated', got: {text[:200]}"
+
+
+# ---------------------------------------------------------------------------
+# create_event_tool — citation_gramps_id_list / note_gramps_id_list
+#
+# Uses a fresh per-test writable client (not the shared session-scoped
+# sqlite_client) since these tests create new events and would otherwise
+# pollute the event count relied on by other test modules.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def event_write_client():
+    from tests.conftest_sqlite import _make_in_memory_db
+    from gramps_mcp._gramps_sqlite import GrampsSqliteDB
+    from gramps_mcp.sqlite_client import GrampsSqliteClient
+
+    conn = _make_in_memory_db()
+    db = GrampsSqliteDB(conn=conn, db_path=":memory:", read_only=False)
+    client = object.__new__(GrampsSqliteClient)
+    client._db = db
+    client._db_path = ":memory:"
+    client._report_cache = {}
+    return client
+
+
+class TestCreateEventToolCitationNoteGramsId:
+    async def test_citation_gramps_id_list_resolves(self, monkeypatch, event_write_client):
+        """citation_gramps_id_list must resolve to citation_list handles."""
+        import gramps_mcp.tools.data_management as dm
+        monkeypatch.setattr(dm, "get_client", lambda: event_write_client)
+        result = await dm.create_event_tool({
+            "type": "Birth",
+            "citation_gramps_id_list": ["C0001"],
+        })
+        text = " ".join(r.text for r in result)
+        assert "Error" not in text, f"Expected success, got: {text[:200]}"
+        assert "Attached citations: C0001" in text
+
+    async def test_note_gramps_id_list_resolves(self, monkeypatch, event_write_client):
+        """note_gramps_id_list must resolve to note_list handles."""
+        import gramps_mcp.tools.data_management as dm
+        monkeypatch.setattr(dm, "get_client", lambda: event_write_client)
+        result = await dm.create_event_tool({
+            "type": "Birth",
+            "citation_list": [],
+            "note_gramps_id_list": ["N0001"],
+        })
+        text = " ".join(r.text for r in result)
+        assert "Error" not in text, f"Expected success, got: {text[:200]}"
+        assert "Attached notes: N0001" in text

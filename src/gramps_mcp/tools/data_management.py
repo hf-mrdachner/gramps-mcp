@@ -272,7 +272,21 @@ async def create_family_tool(arguments: Dict) -> List[TextContent]:
 async def create_event_tool(arguments: Dict) -> List[TextContent]:
     """
     Create or update life event including person/place associations.
+
+    Accepts citation_gramps_id_list, note_gramps_id_list in addition to the
+    corresponding handle-list fields — resolved automatically via resolve_handles.
     """
+    from ..gramps_id import resolve_handles
+
+    client = get_client()
+    try:
+        arguments = await resolve_handles(
+            arguments,
+            {"citation_list": "citation", "note_list": "note"},
+            client,
+        )
+    finally:
+        await client.close()
     return await _handle_crud_operation(
         arguments, "event", ApiCalls.POST_EVENTS, ApiCalls.PUT_EVENT, EventSaveParams
     )

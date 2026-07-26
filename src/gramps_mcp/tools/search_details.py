@@ -1013,10 +1013,12 @@ async def merge_families_tool(client, arguments: Dict) -> List[TextContent]:
             )
             # Redirect person family_list references
             for p in affected_as_parent:
-                new_fl = [
-                    winner_handle if h == loser_handle else h
-                    for h in p.get("family_list", [])
-                ]
+                new_fl = list(
+                    dict.fromkeys(
+                        winner_handle if h == loser_handle else h
+                        for h in p.get("family_list", [])
+                    )
+                )
                 await client.make_api_call(
                     ApiCalls.PUT_PERSON,
                     tree_id=tree_id,
@@ -1025,10 +1027,12 @@ async def merge_families_tool(client, arguments: Dict) -> List[TextContent]:
                 )
             # Redirect person parent_family_list references
             for p in affected_as_child:
-                new_pfl = [
-                    winner_handle if h == loser_handle else h
-                    for h in p.get("parent_family_list", [])
-                ]
+                new_pfl = list(
+                    dict.fromkeys(
+                        winner_handle if h == loser_handle else h
+                        for h in p.get("parent_family_list", [])
+                    )
+                )
                 await client.make_api_call(
                     ApiCalls.PUT_PERSON,
                     tree_id=tree_id,

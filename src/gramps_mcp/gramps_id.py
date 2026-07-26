@@ -35,6 +35,7 @@ def _gramps_id_field(handle_field: str) -> str:
         handle        -> gramps_id
         father_handle -> father_gramps_id
         child_handles -> child_gramps_ids
+        citation_list -> citation_gramps_id_list
         handle1       -> gramps_id1
 
     Args:
@@ -49,6 +50,8 @@ def _gramps_id_field(handle_field: str) -> str:
         return handle_field[: -len("_handles")] + "_gramps_ids"
     if handle_field.endswith("_handle"):
         return handle_field[: -len("_handle")] + "_gramps_id"
+    if handle_field.endswith("_list"):
+        return handle_field[: -len("_list")] + "_gramps_id_list"
     suffix = handle_field[len("handle"):]
     if handle_field.startswith("handle") and suffix.isdigit():
         return "gramps_id" + suffix
@@ -123,7 +126,7 @@ async def resolve_handles(
         if result.get(handle_field):
             continue  # handle already provided — takes precedence
 
-        if handle_field.endswith("_handles"):
+        if handle_field.endswith("_handles") or handle_field.endswith("_list"):
             ids: List[str] = (
                 gramps_id_value
                 if isinstance(gramps_id_value, list)
