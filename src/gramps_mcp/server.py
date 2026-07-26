@@ -921,10 +921,10 @@ app = FastMCP(
     instructions=(
         "Gramps genealogy database — SQLite backend.\n\n"
         "Load a tool-group resource before working in a domain:\n\n"
-        "  gramps://tools/person    — create/get/merge/split persons, DNA\n"
+        "  gramps://tools/person    — create/get/merge/split persons, DNA, notes\n"
         "  gramps://tools/event     — create/get events, add/remove event↔person links\n"
         "  gramps://tools/citation  — create citations/sources, add/remove citation↔event links\n"
-        "  gramps://tools/family    — create/get/merge families, child links\n"
+        "  gramps://tools/family    — create/get/merge families, child links, notes\n"
         "  gramps://tools/search    — find_anything, ancestors, descendants, tree stats\n"
         "  gramps://tools/admin     — open/close/list databases\n\n"
         "Before writing raw SQLite: always check if an MCP tool covers the operation."

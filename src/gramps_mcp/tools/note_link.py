@@ -85,6 +85,18 @@ def _upsert_note(
     note_obj: Dict[str, Any] = {}
     if resolved_handle:
         note_obj["handle"] = resolved_handle
+        # db.put() computes the stored `private` field and `format` secondary
+        # column directly from this patch dict (see _build_gramps_json/
+        # _secondaries in _gramps_sqlite.py), so a partial patch would silently
+        # reset an existing note's private flag and format on every update.
+        # Carry both forward from the existing row to keep the patch complete.
+        row = conn.execute(
+            "SELECT json_data FROM note WHERE handle = ?",  # noqa: S608
+            (resolved_handle,),
+        ).fetchone()
+        existing_note = json.loads(row[0]) if row else {}
+        note_obj["private"] = existing_note.get("private", False)
+        note_obj["format"] = existing_note.get("format", 0)
     if text is not None:
         note_obj["text"] = {"string": text}
     if type is not None:

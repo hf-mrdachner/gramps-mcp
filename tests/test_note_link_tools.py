@@ -13,7 +13,7 @@ import sqlite3
 import pytest
 from mcp.types import TextContent
 
-from gramps_mcp._gramps_sqlite import GrampsSqliteDB, NOTE_TYPE
+from gramps_mcp._gramps_sqlite import NOTE_TYPE, GrampsSqliteDB
 from gramps_mcp.client import GrampsAPIError
 
 _SCHEMA = """
@@ -133,22 +133,24 @@ def _insert_note(
     gramps_id: str,
     text: str = "Original text",
     note_type: str = "General",
+    private: bool = False,
+    format: int = 0,
 ) -> None:
     data = {
         "_class": "Note",
         "handle": handle,
         "gramps_id": gramps_id,
-        "format": 0,
+        "format": format,
         "text": {"_class": "StyledText", "string": text, "tags": []},
         "type": {"_class": "NoteType", "value": 1, "string": note_type},
         "tag_list": [],
         "change": 0,
-        "private": False,
+        "private": private,
     }
     conn.execute(
         "INSERT INTO note (handle, gramps_id, json_data, format, change, private) "
-        "VALUES (?,?,?,0,0,0)",
-        (handle, gramps_id, json.dumps(data)),
+        "VALUES (?,?,?,?,0,?)",
+        (handle, gramps_id, json.dumps(data), format, int(private)),
     )
     conn.commit()
 
@@ -173,7 +175,8 @@ def _insert_family(conn, handle: str, gramps_id: str, note_list=None) -> None:
         "private": False,
     }
     conn.execute(
-        "INSERT INTO family (handle, gramps_id, json_data, change, private) VALUES (?,?,?,0,0)",
+        "INSERT INTO family (handle, gramps_id, json_data, change, private) "
+        "VALUES (?,?,?,0,0)",
         (handle, gramps_id, json.dumps(data)),
     )
     conn.commit()
@@ -357,6 +360,46 @@ class TestAddNoteToPerson:
                 )
             )
 
+    def test_update_preserves_private_and_format(self, fresh_db):
+        """Updating a note's text must not silently reset private/format.
+
+        Regression test: db.put() computes the stored `private` field and the
+        `format` secondary column directly from the patch dict it is given, so
+        a partial patch (only handle/text/type) would previously reset an
+        existing note's private=True flag and non-default format to
+        False/0 on every update.
+        """
+        from gramps_mcp.tools.note_link import add_note_to_person_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001", note_list=["h_no"])
+        _insert_note(
+            conn,
+            "h_no",
+            "N0001",
+            text="Old text",
+            private=True,
+            format=1,
+        )
+
+        result = asyncio.run(
+            add_note_to_person_tool(
+                person_handle="h_pe", note_handle="h_no", text="New text", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "updated"
+
+        row = conn.execute(
+            "SELECT json_data, private, format FROM note WHERE handle = 'h_no'"
+        ).fetchone()
+        note_data = json.loads(row["json_data"])
+        assert note_data["text"]["string"] == "New text"
+        assert note_data["private"] is True
+        assert note_data["format"] == 1
+        assert row["private"] == 1
+        assert row["format"] == 1
+
 
 # ===========================================================================
 # add_note_to_family
@@ -531,6 +574,19 @@ class TestRemoveNoteFromPerson:
         )
         assert json.loads(result[0].text)["result"] == "ok"
 
+    def test_error_unknown_person(self, fresh_db):
+        from gramps_mcp.tools.note_link import remove_note_from_person_tool
+
+        db, conn = fresh_db
+        _insert_note(conn, "h_no", "N0001")
+
+        with pytest.raises(GrampsAPIError, match="not found"):
+            asyncio.run(
+                remove_note_from_person_tool(
+                    person_gramps_id="missing", note_handle="h_no", db=db
+                )
+            )
+
 
 # ===========================================================================
 # remove_note_from_family
@@ -565,5 +621,18 @@ class TestRemoveNoteFromFamily:
             asyncio.run(
                 remove_note_from_family_tool(
                     family_handle="h_fa", note_handle="h_no", db=db
+                )
+            )
+
+    def test_error_unknown_family(self, fresh_db):
+        from gramps_mcp.tools.note_link import remove_note_from_family_tool
+
+        db, conn = fresh_db
+        _insert_note(conn, "h_no", "N0001")
+
+        with pytest.raises(GrampsAPIError, match="not found"):
+            asyncio.run(
+                remove_note_from_family_tool(
+                    family_gramps_id="missing", note_handle="h_no", db=db
                 )
             )

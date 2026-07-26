@@ -284,7 +284,8 @@ async def get_note_tool(client, arguments: Dict) -> List[TextContent]:
 
         lines = [f"## {note_type} Note — {gramps_id} [{handle}]", "", text, ""]
 
-        # Find persons and families with this note linked — scan all, GQL cannot search inside arrays
+        # Find persons and families with this note linked — scan all, GQL
+        # cannot search inside arrays
         all_persons = await client.make_api_call(
             ApiCalls.GET_PEOPLE, tree_id=tree_id, params={"pagesize": 99999}
         )
