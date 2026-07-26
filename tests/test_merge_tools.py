@@ -528,3 +528,60 @@ class TestMergePersonsFamilyEventFixup:
         refs = [e.get("ref") for e in fam_after.get("event_ref_list", []) if isinstance(e, dict)]
         assert refs.count("h_ev_m_w") == 1, f"Duplicate winner ref: {refs}"
         assert "h_ev_m_l" not in refs, f"Dangling loser ref: {refs}"
+
+
+# ---------------------------------------------------------------------------
+# 9. merge_persons — family child_ref_list dedupe (regression)
+#
+# If winner and loser were both (mistakenly) entered as separate children of
+# the same family — exactly the scenario merge_persons exists to fix —
+# rewriting the loser's ChildRef.ref to the winner handle must not leave two
+# ChildRef entries pointing at the winner.
+# ---------------------------------------------------------------------------
+
+def _cref(handle: str) -> dict:
+    return {
+        "_class": "ChildRef", "ref": handle,
+        "frel": {"_class": "ChildRefType", "value": 1, "string": ""},
+        "mrel": {"_class": "ChildRefType", "value": 1, "string": ""},
+        "private": False, "citation_list": [], "note_list": [],
+    }
+
+
+class TestMergePersonsChildRefListDedupe:
+    def test_winner_not_duplicated_in_child_ref_list(self):
+        """If winner and loser both appear as children, merge must dedupe them."""
+        conn = _make_merge_db()
+
+        fam = {
+            "_class": "Family", "handle": "h_fa", "gramps_id": "F0001",
+            "father_handle": "h_o", "mother_handle": None,
+            "child_ref_list": [_cref("h_w"), _cref("h_l")],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        conn.execute(
+            "INSERT INTO family (handle, gramps_id, json_data, father_handle, mother_handle) "
+            "VALUES (?,?,?,?,?)",
+            ["h_fa", "F0001", json.dumps(fam), "h_o", None],
+        )
+        for h in ("h_w", "h_l"):
+            row = conn.execute(
+                "SELECT json_data FROM person WHERE handle=?", (h,)
+            ).fetchone()
+            p = json.loads(row["json_data"])
+            p["parent_family_list"] = ["h_fa"]
+            conn.execute(
+                "UPDATE person SET json_data=? WHERE handle=?", (json.dumps(p), h)
+            )
+        conn.commit()
+
+        merge_persons(conn, "h_w", "h_l", dry_run=False)
+
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle='h_fa'"
+        ).fetchone()
+        fam_after = json.loads(row["json_data"])
+        refs = [c["ref"] for c in fam_after.get("child_ref_list", [])]
+        assert refs.count("h_w") == 1, f"Duplicate winner child ref: {refs}"

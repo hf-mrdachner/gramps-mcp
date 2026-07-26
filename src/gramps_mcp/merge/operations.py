@@ -393,9 +393,21 @@ def _commit_merge(
             if fam.get("mother_handle") == loser_handle:
                 fam["mother_handle"] = winner_handle
                 changed = True
-            for c in fam.get("child_ref_list", []):
+            child_refs = fam.get("child_ref_list", [])
+            for c in child_refs:
                 if c["ref"] == loser_handle:
                     c["ref"] = winner_handle
+                    changed = True
+            if child_refs:
+                deduped_refs = []
+                seen_refs: Set[str] = set()
+                for c in child_refs:
+                    if c["ref"] in seen_refs:
+                        continue
+                    seen_refs.add(c["ref"])
+                    deduped_refs.append(c)
+                if len(deduped_refs) != len(child_refs):
+                    fam["child_ref_list"] = deduped_refs
                     changed = True
             if changed:
                 conn.execute(
