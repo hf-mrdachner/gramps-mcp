@@ -95,7 +95,7 @@ def _year_from_event(ev: dict) -> Optional[int]:
     dv = ev.get("date", {}).get("dateval", [0, 0, 0, False])
     if dv[2]:
         return int(dv[2])
-    date_str = ev.get("date", {}).get("string", "") or ""
+    date_str = ev.get("date", {}).get("text", "") or ""
     m = re.search(r"\b(\d{4})\b", date_str)
     return int(m.group(1)) if m else None
 

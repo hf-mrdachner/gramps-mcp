@@ -199,7 +199,7 @@ def _year_from_date(date: Dict) -> str:
     dv = date.get("dateval", [])
     if len(dv) >= 3 and dv[2]:
         return str(dv[2])
-    s = date.get("string", "")
+    s = date.get("text", "")
     m = re.search(r"\b(\d{4})\b", s)
     return m.group(1) if m else ""
 

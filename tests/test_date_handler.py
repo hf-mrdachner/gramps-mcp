@@ -47,3 +47,15 @@ def test_format_date_range_without_second_date_falls_back():
     # Short dateval (no second date present) must not crash.
     date_obj = {"dateval": [1, 1, 1589, False], "modifier": 4, "quality": 0}
     assert format_date(date_obj) == "between 01 January 1589"
+
+
+def test_format_date_textonly_uses_free_text():
+    # Gramps stores unparsed dates (e.g. "7 Mai 1604") under date.text with
+    # modifier 6 ("textonly") and an empty dateval -- not under date.string.
+    date_obj = {
+        "dateval": [0, 0, 0, False],
+        "modifier": 6,
+        "quality": 0,
+        "text": "7 Mai 1604",
+    }
+    assert format_date(date_obj) == "7 Mai 1604"
