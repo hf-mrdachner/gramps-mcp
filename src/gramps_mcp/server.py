@@ -40,11 +40,15 @@ from .models.parameters.link_edit_params import (
     AddCitationToEventParams,
     AddEventToFamilyParams,
     AddEventToPersonParams,
+    AddNoteToFamilyParams,
+    AddNoteToPersonParams,
     MoveAttachmentParams,
-    RemoveCitationFromEventParams,
     RemoveChildFromFamilyParams,
+    RemoveCitationFromEventParams,
     RemoveEventFromFamilyParams,
     RemoveEventFromPersonParams,
+    RemoveNoteFromFamilyParams,
+    RemoveNoteFromPersonParams,
 )
 from .models.parameters.dna_params import (
     AddDnaMatchParams,
@@ -106,6 +110,12 @@ from .tools.link_edit import (
 from .tools.citation_link import (
     add_citation_to_event_tool,
     remove_citation_from_event_tool,
+)
+from .tools.note_link import (
+    add_note_to_family_tool,
+    add_note_to_person_tool,
+    remove_note_from_family_tool,
+    remove_note_from_person_tool,
 )
 from .tools.dna import (
     add_dna_match_tool,
@@ -317,6 +327,50 @@ async def _handle_remove_citation_from_event(args: Dict) -> Any:
         event_gramps_id=args.get("event_gramps_id"),
         citation_handle=args.get("citation_handle"),
         citation_gramps_id=args.get("citation_gramps_id"),
+    )
+
+
+async def _handle_add_note_to_person(args: Dict) -> Any:
+    """Handler for add_note_to_person."""
+    return await add_note_to_person_tool(
+        person_handle=args.get("person_handle"),
+        person_gramps_id=args.get("person_gramps_id"),
+        note_handle=args.get("note_handle"),
+        note_gramps_id=args.get("note_gramps_id"),
+        text=args.get("text"),
+        type=args.get("type"),
+    )
+
+
+async def _handle_add_note_to_family(args: Dict) -> Any:
+    """Handler for add_note_to_family."""
+    return await add_note_to_family_tool(
+        family_handle=args.get("family_handle"),
+        family_gramps_id=args.get("family_gramps_id"),
+        note_handle=args.get("note_handle"),
+        note_gramps_id=args.get("note_gramps_id"),
+        text=args.get("text"),
+        type=args.get("type"),
+    )
+
+
+async def _handle_remove_note_from_person(args: Dict) -> Any:
+    """Handler for remove_note_from_person."""
+    return await remove_note_from_person_tool(
+        person_handle=args.get("person_handle"),
+        person_gramps_id=args.get("person_gramps_id"),
+        note_handle=args.get("note_handle"),
+        note_gramps_id=args.get("note_gramps_id"),
+    )
+
+
+async def _handle_remove_note_from_family(args: Dict) -> Any:
+    """Handler for remove_note_from_family."""
+    return await remove_note_from_family_tool(
+        family_handle=args.get("family_handle"),
+        family_gramps_id=args.get("family_gramps_id"),
+        note_handle=args.get("note_handle"),
+        note_gramps_id=args.get("note_gramps_id"),
     )
 
 
@@ -746,6 +800,41 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "schema": MoveAttachmentParams,
         "handler": _handle_move_attachment,
     },
+    "add_note_to_person": {
+        "description": (
+            "Link a note to a person. Three modes: pass note_handle/note_gramps_id alone "
+            "to link an existing note; pass text+type alone to create a new note and link "
+            "it; pass note_handle/note_gramps_id together with text and/or type to "
+            "overwrite the existing note's content and ensure it's linked. Idempotent "
+            "link-only calls return result='no_change'. SQLite backend only."
+        ),
+        "schema": AddNoteToPersonParams,
+        "handler": _handle_add_note_to_person,
+    },
+    "remove_note_from_person": {
+        "description": (
+            "Remove a note from a person's note_list. Does not delete the Note object "
+            "itself — use delete_object for that. SQLite backend only."
+        ),
+        "schema": RemoveNoteFromPersonParams,
+        "handler": _handle_remove_note_from_person,
+    },
+    "add_note_to_family": {
+        "description": (
+            "Link a note to a family. Same three modes as add_note_to_person: link "
+            "existing, create+link, or update+link. SQLite backend only."
+        ),
+        "schema": AddNoteToFamilyParams,
+        "handler": _handle_add_note_to_family,
+    },
+    "remove_note_from_family": {
+        "description": (
+            "Remove a note from a family's note_list. Does not delete the Note object "
+            "itself — use delete_object for that. SQLite backend only."
+        ),
+        "schema": RemoveNoteFromFamilyParams,
+        "handler": _handle_remove_note_from_family,
+    },
 }
 
 
@@ -755,6 +844,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "create_person", "get_person",
         "merge_persons", "split_person", "find_duplicate_persons",
         "add_dna_match", "get_dna_matches", "update_dna_match",
+        "add_note_to_person", "remove_note_from_person",
     ],
     "event": [
         "create_event", "get_event",
@@ -769,6 +859,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "create_family", "get_family",
         "merge_families", "remove_child_from_family",
         "add_event_to_family", "remove_event_from_family",
+        "add_note_to_family", "remove_note_from_family",
     ],
     "search": [
         "find_anything", "find_type", "get_type",
