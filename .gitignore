@@ -11,3 +11,4 @@ __pycache__
 PR_DRAFT.md
 .claude/
 src/gramps_mcp.egg-info/
+.superpowers/

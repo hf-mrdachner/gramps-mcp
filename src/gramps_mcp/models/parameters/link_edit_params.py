@@ -59,17 +59,17 @@ class AddEventToFamilyParams(BaseModel):
 class RemoveEventFromFamilyParams(BaseModel):
     """Parameters for remove_event_from_family tool."""
 
-    family_handle: Optional[str] = Field(
-        None, description="Handle of the family"
-    )
+    family_handle: Optional[str] = Field(None, description="Handle of the family")
     family_gramps_id: Optional[str] = Field(
-        None, description="Gramps ID of the family (e.g. 'F0042'). Alternative to family_handle."
+        None,
+        description="Gramps ID of the family (e.g. 'F0042'). Alternative to family_handle.",
     )
     event_handle: Optional[str] = Field(
         None, description="Handle of the event to unlink"
     )
     event_gramps_id: Optional[str] = Field(
-        None, description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle."
+        None,
+        description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle.",
     )
 
 
@@ -93,17 +93,17 @@ class RemoveChildFromFamilyParams(BaseModel):
 class RemoveEventFromPersonParams(BaseModel):
     """Parameters for remove_event_from_person tool."""
 
-    person_handle: Optional[str] = Field(
-        None, description="Handle of the person"
-    )
+    person_handle: Optional[str] = Field(None, description="Handle of the person")
     person_gramps_id: Optional[str] = Field(
-        None, description="Gramps ID of the person (e.g. 'I0042'). Alternative to person_handle."
+        None,
+        description="Gramps ID of the person (e.g. 'I0042'). Alternative to person_handle.",
     )
     event_handle: Optional[str] = Field(
         None, description="Handle of the event to unlink"
     )
     event_gramps_id: Optional[str] = Field(
-        None, description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle."
+        None,
+        description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle.",
     )
 
 
@@ -117,7 +117,8 @@ class MoveAttachmentParams(BaseModel):
         None, description="Handle of the note or media object to move"
     )
     gramps_id: Optional[str] = Field(
-        None, description="Gramps ID of the note or media object. Alternative to handle."
+        None,
+        description="Gramps ID of the note or media object. Alternative to handle.",
     )
     from_handle: Optional[str] = Field(None, description="Handle of the source object")
     from_gramps_id: Optional[str] = Field(
@@ -138,11 +139,10 @@ class MoveAttachmentParams(BaseModel):
 class AddCitationToEventParams(BaseModel):
     """Parameters for add_citation_to_event tool."""
 
-    event_handle: Optional[str] = Field(
-        None, description="Handle of the event"
-    )
+    event_handle: Optional[str] = Field(None, description="Handle of the event")
     event_gramps_id: Optional[str] = Field(
-        None, description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle."
+        None,
+        description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle.",
     )
     citation_handle: Optional[str] = Field(
         None, description="Handle of the citation to add"
@@ -156,11 +156,10 @@ class AddCitationToEventParams(BaseModel):
 class RemoveCitationFromEventParams(BaseModel):
     """Parameters for remove_citation_from_event tool."""
 
-    event_handle: Optional[str] = Field(
-        None, description="Handle of the event"
-    )
+    event_handle: Optional[str] = Field(None, description="Handle of the event")
     event_gramps_id: Optional[str] = Field(
-        None, description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle."
+        None,
+        description="Gramps ID of the event (e.g. 'E0007'). Alternative to event_handle.",
     )
     citation_handle: Optional[str] = Field(
         None, description="Handle of the citation to remove"
@@ -168,4 +167,118 @@ class RemoveCitationFromEventParams(BaseModel):
     citation_gramps_id: Optional[str] = Field(
         None,
         description="Gramps ID of the citation (e.g. 'C0012'). Alternative to citation_handle.",
+    )
+
+
+class AddNoteToPersonParams(BaseModel):
+    """Parameters for add_note_to_person tool."""
+
+    person_handle: Optional[str] = Field(None, description="Handle of the person")
+    person_gramps_id: Optional[str] = Field(
+        None,
+        description=(
+            "Gramps ID of the person (e.g. 'I0001'). Alternative to person_handle."
+        ),
+    )
+    note_handle: Optional[str] = Field(
+        None, description="Handle of an existing note to link or update"
+    )
+    note_gramps_id: Optional[str] = Field(
+        None,
+        description=(
+            "Gramps ID of an existing note (e.g. 'N0001'). "
+            "Alternative to note_handle."
+        ),
+    )
+    text: Optional[str] = Field(
+        None,
+        description=(
+            "Note text. Required when note_handle/note_gramps_id are both omitted "
+            "(creates a new note). If given together with note_handle/note_gramps_id, "
+            "overwrites the existing note's text."
+        ),
+    )
+    type: Optional[str] = Field(
+        None,
+        description=(
+            "Note type (e.g. 'Research'). Required when note_handle/note_gramps_id "
+            "are both omitted (creates a new note). If given with note_handle/"
+            "note_gramps_id, overwrites the existing note's type."
+        ),
+    )
+
+
+class AddNoteToFamilyParams(BaseModel):
+    """Parameters for add_note_to_family tool."""
+
+    family_handle: Optional[str] = Field(None, description="Handle of the family")
+    family_gramps_id: Optional[str] = Field(
+        None,
+        description=(
+            "Gramps ID of the family (e.g. 'F0001'). Alternative to family_handle."
+        ),
+    )
+    note_handle: Optional[str] = Field(
+        None, description="Handle of an existing note to link or update"
+    )
+    note_gramps_id: Optional[str] = Field(
+        None,
+        description=(
+            "Gramps ID of an existing note (e.g. 'N0001'). "
+            "Alternative to note_handle."
+        ),
+    )
+    text: Optional[str] = Field(
+        None,
+        description=(
+            "Note text. Required when note_handle/note_gramps_id are both omitted "
+            "(creates a new note). If given together with note_handle/note_gramps_id, "
+            "overwrites the existing note's text."
+        ),
+    )
+    type: Optional[str] = Field(
+        None,
+        description=(
+            "Note type (e.g. 'Research'). Required when note_handle/note_gramps_id "
+            "are both omitted (creates a new note). If given with note_handle/"
+            "note_gramps_id, overwrites the existing note's type."
+        ),
+    )
+
+
+class RemoveNoteFromPersonParams(BaseModel):
+    """Parameters for remove_note_from_person tool."""
+
+    person_handle: Optional[str] = Field(None, description="Handle of the person")
+    person_gramps_id: Optional[str] = Field(
+        None,
+        description=(
+            "Gramps ID of the person (e.g. 'I0001'). Alternative to person_handle."
+        ),
+    )
+    note_handle: Optional[str] = Field(None, description="Handle of the note to unlink")
+    note_gramps_id: Optional[str] = Field(
+        None,
+        description=(
+            "Gramps ID of the note (e.g. 'N0001'). Alternative to note_handle."
+        ),
+    )
+
+
+class RemoveNoteFromFamilyParams(BaseModel):
+    """Parameters for remove_note_from_family tool."""
+
+    family_handle: Optional[str] = Field(None, description="Handle of the family")
+    family_gramps_id: Optional[str] = Field(
+        None,
+        description=(
+            "Gramps ID of the family (e.g. 'F0001'). Alternative to family_handle."
+        ),
+    )
+    note_handle: Optional[str] = Field(None, description="Handle of the note to unlink")
+    note_gramps_id: Optional[str] = Field(
+        None,
+        description=(
+            "Gramps ID of the note (e.g. 'N0001'). Alternative to note_handle."
+        ),
     )

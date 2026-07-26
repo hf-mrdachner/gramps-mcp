@@ -57,6 +57,7 @@ async def get_person_tool(client, arguments: Dict) -> List[TextContent]:
     """
     try:
         from ..gramps_id import resolve_handles
+
         arguments = await resolve_handles(arguments, {"handle": "person"}, client)
         handle = arguments.get("handle") or arguments.get("person_handle")
         if not handle:
@@ -77,6 +78,7 @@ async def get_family_tool(client, arguments: Dict) -> List[TextContent]:
     """
     try:
         from ..gramps_id import resolve_handles
+
         arguments = await resolve_handles(arguments, {"handle": "family"}, client)
         handle = arguments.get("handle") or arguments.get("family_handle")
         if not handle:
@@ -97,13 +99,16 @@ async def get_event_tool(client, arguments: Dict) -> List[TextContent]:
     """
     try:
         from ..gramps_id import resolve_handles
+
         arguments = await resolve_handles(arguments, {"handle": "event"}, client)
         handle = arguments.get("handle")
         settings = get_settings()
         tree_id = settings.gramps_tree_id
         if not handle:
             raise ValueError("handle or gramps_id is required")
-        event = await client.make_api_call(ApiCalls.GET_EVENT, tree_id=tree_id, handle=handle)
+        event = await client.make_api_call(
+            ApiCalls.GET_EVENT, tree_id=tree_id, handle=handle
+        )
         if not event:
             return [TextContent(type="text", text=f"Event {handle} not found")]
         gramps_id = event.get("gramps_id", handle)
@@ -144,7 +149,11 @@ async def get_event_tool(client, arguments: Dict) -> List[TextContent]:
             for ref in person.get("event_ref_list", []):
                 ref_handle = ref.get("ref", "") if isinstance(ref, dict) else ref
                 if ref_handle == handle:
-                    role = ref.get("role", "Primary") if isinstance(ref, dict) else "Primary"
+                    role = (
+                        ref.get("role", "Primary")
+                        if isinstance(ref, dict)
+                        else "Primary"
+                    )
                     pn = person.get("primary_name", {})
                     given = pn.get("first_name", "")
                     sl = pn.get("surname_list", [])
@@ -173,13 +182,16 @@ async def get_place_tool(client, arguments: Dict) -> List[TextContent]:
     """
     try:
         from ..gramps_id import resolve_handles
+
         arguments = await resolve_handles(arguments, {"handle": "place"}, client)
         handle = arguments.get("handle")
         settings = get_settings()
         tree_id = settings.gramps_tree_id
         if not handle:
             raise ValueError("handle or gramps_id is required")
-        place = await client.make_api_call(ApiCalls.GET_PLACE, tree_id=tree_id, handle=handle)
+        place = await client.make_api_call(
+            ApiCalls.GET_PLACE, tree_id=tree_id, handle=handle
+        )
         if not place:
             return [TextContent(type="text", text=f"Place {handle} not found")]
         gramps_id = place.get("gramps_id", handle)
@@ -194,7 +206,9 @@ async def get_place_tool(client, arguments: Dict) -> List[TextContent]:
             lines.append(f"* Koordinaten: {lat}°N {lon}°E")
         for url in urls:
             if isinstance(url, dict):
-                lines.append(f"* {url.get('description', 'URL')}: {url.get('path', '')}")
+                lines.append(
+                    f"* {url.get('description', 'URL')}: {url.get('path', '')}"
+                )
 
         # Scan all events for this place handle
         all_events = await client.make_api_call(
@@ -244,6 +258,70 @@ async def get_place_tool(client, arguments: Dict) -> List[TextContent]:
 
 
 @with_client
+async def get_note_tool(client, arguments: Dict) -> List[TextContent]:
+    """
+    Get full note text by gramps_id and find which persons/families have it linked.
+    Scans all persons and families — fact-based, no guessing. Notes attached only to
+    other object types (events, citations, sources, places, media) are not found here.
+    """
+    try:
+        from ..gramps_id import resolve_handles
+
+        arguments = await resolve_handles(arguments, {"handle": "note"}, client)
+        handle = arguments.get("handle")
+        settings = get_settings()
+        tree_id = settings.gramps_tree_id
+        if not handle:
+            raise ValueError("gramps_id is required")
+        note = await client.make_api_call(
+            ApiCalls.GET_NOTE, tree_id=tree_id, handle=handle
+        )
+        if not note:
+            return [TextContent(type="text", text=f"Note {handle} not found")]
+        gramps_id = note.get("gramps_id", handle)
+        note_type = note.get("type", "Unknown")
+        text = note.get("text", {}).get("string", "")
+
+        lines = [f"## {note_type} Note — {gramps_id} [{handle}]", "", text, ""]
+
+        # Find persons and families with this note linked — scan all, GQL
+        # cannot search inside arrays
+        all_persons = await client.make_api_call(
+            ApiCalls.GET_PEOPLE, tree_id=tree_id, params={"pagesize": 99999}
+        )
+        all_families = await client.make_api_call(
+            ApiCalls.GET_FAMILIES, tree_id=tree_id, params={"pagesize": 99999}
+        )
+
+        found = []
+        for person in all_persons:
+            if handle in person.get("note_list", []):
+                pn = person.get("primary_name", {})
+                given = pn.get("first_name", "")
+                sl = pn.get("surname_list", [])
+                surname = sl[0].get("surname", "") if sl else ""
+                name = f"{given} {surname}".strip() or "?"
+                pid = person.get("gramps_id", "")
+                found.append(f"* Person: {name} ({pid})")
+
+        for family in all_families:
+            if handle in family.get("note_list", []):
+                fid = family.get("gramps_id", "")
+                found.append(f"* Familie: {fid}")
+
+        lines.append("**Verlinkt mit:**")
+        if found:
+            lines.extend(found)
+        else:
+            lines.append("* Keine Verknüpfungen gefunden")
+
+        return [TextContent(type="text", text="\n".join(lines))]
+
+    except Exception as e:
+        return _format_error_response(e, "note details retrieval")
+
+
+@with_client
 async def merge_places_tool(client, arguments: Dict) -> List[TextContent]:
     """
     Merge a duplicate place (loser) into a canonical place (winner).
@@ -262,12 +340,14 @@ async def merge_places_tool(client, arguments: Dict) -> List[TextContent]:
 
         # Resolve both places
         winners = await client.make_api_call(
-            ApiCalls.GET_PLACES, tree_id=tree_id,
-            params={"gramps_id": winner_id, "pagesize": 1}
+            ApiCalls.GET_PLACES,
+            tree_id=tree_id,
+            params={"gramps_id": winner_id, "pagesize": 1},
         )
         losers = await client.make_api_call(
-            ApiCalls.GET_PLACES, tree_id=tree_id,
-            params={"gramps_id": loser_id, "pagesize": 1}
+            ApiCalls.GET_PLACES,
+            tree_id=tree_id,
+            params={"gramps_id": loser_id, "pagesize": 1},
         )
 
         if not winners:
@@ -283,7 +363,11 @@ async def merge_places_tool(client, arguments: Dict) -> List[TextContent]:
         loser_name = loser.get("name", {}).get("value", loser_id)
 
         if winner_handle == loser_handle:
-            return [TextContent(type="text", text="Winner und Loser sind identisch — nichts zu tun.")]
+            return [
+                TextContent(
+                    type="text", text="Winner und Loser sind identisch — nichts zu tun."
+                )
+            ]
 
         # Scan all events for loser place
         all_events = await client.make_api_call(
@@ -296,7 +380,8 @@ async def merge_places_tool(client, arguments: Dict) -> List[TextContent]:
             ApiCalls.GET_PLACES, tree_id=tree_id, params={"pagesize": 99999}
         )
         affected_child_places = [
-            p for p in all_places
+            p
+            for p in all_places
             if any(
                 (r.get("ref", "") if isinstance(r, dict) else r) == loser_handle
                 for r in p.get("placeref_list", [])
@@ -306,7 +391,9 @@ async def merge_places_tool(client, arguments: Dict) -> List[TextContent]:
         # Transfer loser's placeref_list to winner if winner has none
         loser_placrefs = loser.get("placeref_list", [])
         winner_placrefs = winner.get("placeref_list", [])
-        transfer_placrefs = loser_placrefs if loser_placrefs and not winner_placrefs else []
+        transfer_placrefs = (
+            loser_placrefs if loser_placrefs and not winner_placrefs else []
+        )
 
         prefix = "[DRY RUN] " if dry_run else ""
         lines = [
@@ -315,7 +402,9 @@ async def merge_places_tool(client, arguments: Dict) -> List[TextContent]:
         ]
         if transfer_placrefs:
             planned = "[PLANNED] " if dry_run else ""
-            lines.append(f"{planned}Übergeordnete Orte vom Loser übernommen: {len(transfer_placrefs)}")
+            lines.append(
+                f"{planned}Übergeordnete Orte vom Loser übernommen: {len(transfer_placrefs)}"
+            )
         lines.append("")
 
         for event in affected_events:
@@ -324,30 +413,45 @@ async def merge_places_tool(client, arguments: Dict) -> List[TextContent]:
             date_str = format_date(event.get("date", {}))
             lines.append(f"* Event: {etype} {date_str} ({eid})")
         for place in affected_child_places:
-            lines.append(f"* Ort: {place.get('name', {}).get('value', '?')} ({place.get('gramps_id', '?')})")
+            lines.append(
+                f"* Ort: {place.get('name', {}).get('value', '?')} ({place.get('gramps_id', '?')})"
+            )
 
         if not dry_run:
             # Redirect events
             for event in affected_events:
                 await client.make_api_call(
-                    ApiCalls.PUT_EVENT, tree_id=tree_id, handle=event["handle"],
+                    ApiCalls.PUT_EVENT,
+                    tree_id=tree_id,
+                    handle=event["handle"],
                     params={"handle": event["handle"], "place": winner_handle},
                 )
             # Redirect child places: replace loser ref with winner ref
             for place in affected_child_places:
                 new_refs = [
-                    {**r, "ref": winner_handle} if (r.get("ref") if isinstance(r, dict) else r) == loser_handle else r
+                    (
+                        {**r, "ref": winner_handle}
+                        if (r.get("ref") if isinstance(r, dict) else r) == loser_handle
+                        else r
+                    )
                     for r in place.get("placeref_list", [])
                 ]
                 await client.make_api_call(
-                    ApiCalls.PUT_PLACE, tree_id=tree_id, handle=place["handle"],
+                    ApiCalls.PUT_PLACE,
+                    tree_id=tree_id,
+                    handle=place["handle"],
                     params={"handle": place["handle"], "placeref_list": new_refs},
                 )
             # Transfer parent hierarchy if winner has none
             if transfer_placrefs:
                 await client.make_api_call(
-                    ApiCalls.PUT_PLACE, tree_id=tree_id, handle=winner_handle,
-                    params={"handle": winner_handle, "placeref_list": transfer_placrefs},
+                    ApiCalls.PUT_PLACE,
+                    tree_id=tree_id,
+                    handle=winner_handle,
+                    params={
+                        "handle": winner_handle,
+                        "placeref_list": transfer_placrefs,
+                    },
                 )
             # Delete loser
             await client.make_api_call(
@@ -384,12 +488,14 @@ async def merge_events_tool(client, arguments: Dict) -> List[TextContent]:
         tree_id = settings.gramps_tree_id
 
         winners = await client.make_api_call(
-            ApiCalls.GET_EVENTS, tree_id=tree_id,
-            params={"gramps_id": winner_id, "pagesize": 1}
+            ApiCalls.GET_EVENTS,
+            tree_id=tree_id,
+            params={"gramps_id": winner_id, "pagesize": 1},
         )
         losers = await client.make_api_call(
-            ApiCalls.GET_EVENTS, tree_id=tree_id,
-            params={"gramps_id": loser_id, "pagesize": 1}
+            ApiCalls.GET_EVENTS,
+            tree_id=tree_id,
+            params={"gramps_id": loser_id, "pagesize": 1},
         )
         if not winners:
             return [TextContent(type="text", text=f"Winner {winner_id} nicht gefunden")]
@@ -406,6 +512,7 @@ async def merge_events_tool(client, arguments: Dict) -> List[TextContent]:
 
         def _merge_unique(winner_lst: list, loser_lst: list) -> list:
             """Append loser items not already in winner (by handle/identity)."""
+
             def _key(i):
                 return (i.get("ref") if isinstance(i, dict) else i) or str(i)
 
@@ -414,12 +521,19 @@ async def merge_events_tool(client, arguments: Dict) -> List[TextContent]:
 
         # Merge citations, notes, media, attributes from loser (no duplicates)
         merged_cits = winner.get("citation_list", []) + [
-            c for c in loser.get("citation_list", [])
+            c
+            for c in loser.get("citation_list", [])
             if c not in winner.get("citation_list", [])
         ]
-        merged_notes = _merge_unique(winner.get("note_list", []), loser.get("note_list", []))
-        merged_media = _merge_unique(winner.get("media_list", []), loser.get("media_list", []))
-        merged_attrs = _merge_unique(winner.get("attribute_list", []), loser.get("attribute_list", []))
+        merged_notes = _merge_unique(
+            winner.get("note_list", []), loser.get("note_list", [])
+        )
+        merged_media = _merge_unique(
+            winner.get("media_list", []), loser.get("media_list", [])
+        )
+        merged_attrs = _merge_unique(
+            winner.get("attribute_list", []), loser.get("attribute_list", [])
+        )
 
         def _has_event_ref(obj: dict) -> bool:
             return any(
@@ -453,47 +567,59 @@ async def merge_events_tool(client, arguments: Dict) -> List[TextContent]:
             given = pn.get("first_name", "")
             sl = pn.get("surname_list", [])
             surname = sl[0].get("surname", "") if sl else ""
-            lines.append(f"* Person: {given} {surname}".strip() + f" ({p.get('gramps_id', '?')})")
+            lines.append(
+                f"* Person: {given} {surname}".strip() + f" ({p.get('gramps_id', '?')})"
+            )
         for f in affected_families:
             lines.append(f"* Familie ({f.get('gramps_id', '?')})")
 
         if not dry_run:
             # Update winner: merge citations, notes, media, attributes
             await client.make_api_call(
-                ApiCalls.PUT_EVENT, tree_id=tree_id, handle=winner_handle,
+                ApiCalls.PUT_EVENT,
+                tree_id=tree_id,
+                handle=winner_handle,
                 params={
                     "handle": winner_handle,
                     "citation_list": merged_cits,
                     "note_list": merged_notes,
                     "media_list": merged_media,
                     "attribute_list": merged_attrs,
-                }
+                },
             )
             # Remove loser from each person's event_ref_list
             for person in affected_persons:
                 new_refs = [
-                    r for r in person.get("event_ref_list", [])
+                    r
+                    for r in person.get("event_ref_list", [])
                     if (r.get("ref", "") if isinstance(r, dict) else r) != loser_handle
                 ]
                 await client.make_api_call(
-                    ApiCalls.PUT_PERSON, tree_id=tree_id, handle=person["handle"],
-                    params={"handle": person["handle"], "event_ref_list": new_refs}
+                    ApiCalls.PUT_PERSON,
+                    tree_id=tree_id,
+                    handle=person["handle"],
+                    params={"handle": person["handle"], "event_ref_list": new_refs},
                 )
             # Remove loser from each family's event_ref_list
             for family in affected_families:
                 new_refs = [
-                    r for r in family.get("event_ref_list", [])
+                    r
+                    for r in family.get("event_ref_list", [])
                     if (r.get("ref", "") if isinstance(r, dict) else r) != loser_handle
                 ]
                 await client.make_api_call(
-                    ApiCalls.PUT_FAMILY, tree_id=tree_id, handle=family["handle"],
-                    params={"handle": family["handle"], "event_ref_list": new_refs}
+                    ApiCalls.PUT_FAMILY,
+                    tree_id=tree_id,
+                    handle=family["handle"],
+                    params={"handle": family["handle"], "event_ref_list": new_refs},
                 )
             # Delete loser event
             await client.make_api_call(
                 ApiCalls.DELETE_EVENT, tree_id=tree_id, handle=loser_handle
             )
-            lines.append(f"\nFertig. {loser_id} gelöscht, Citations/Notes/Media gesichert.")
+            lines.append(
+                f"\nFertig. {loser_id} gelöscht, Citations/Notes/Media gesichert."
+            )
         else:
             lines.append("\nRe-run mit dry_run=False um anzuwenden.")
 
@@ -523,12 +649,14 @@ async def merge_citations_tool(client, arguments: Dict) -> List[TextContent]:
         tree_id = settings.gramps_tree_id
 
         winners = await client.make_api_call(
-            ApiCalls.GET_CITATIONS, tree_id=tree_id,
-            params={"gramps_id": winner_id, "pagesize": 1}
+            ApiCalls.GET_CITATIONS,
+            tree_id=tree_id,
+            params={"gramps_id": winner_id, "pagesize": 1},
         )
         losers = await client.make_api_call(
-            ApiCalls.GET_CITATIONS, tree_id=tree_id,
-            params={"gramps_id": loser_id, "pagesize": 1}
+            ApiCalls.GET_CITATIONS,
+            tree_id=tree_id,
+            params={"gramps_id": loser_id, "pagesize": 1},
         )
         if not winners:
             return [TextContent(type="text", text=f"Winner {winner_id} nicht gefunden")]
@@ -578,14 +706,21 @@ async def merge_citations_tool(client, arguments: Dict) -> List[TextContent]:
         affected_places = [p for p in all_places if _has_citation(p)]
         affected_media = [m for m in all_media if _has_citation(m)]
 
-        total = (len(affected_events) + len(affected_persons) + len(affected_families)
-                 + len(affected_places) + len(affected_media))
+        total = (
+            len(affected_events)
+            + len(affected_persons)
+            + len(affected_families)
+            + len(affected_places)
+            + len(affected_media)
+        )
         prefix = "[DRY RUN] " if dry_run else ""
         lines = [
             f"{prefix}merge_citations: {loser_id} → {winner_id}",
-            (f"{total} Objekte betroffen ({len(affected_events)} Events, "
-             f"{len(affected_persons)} Personen, {len(affected_families)} Familien, "
-             f"{len(affected_places)} Orte, {len(affected_media)} Medien)"),
+            (
+                f"{total} Objekte betroffen ({len(affected_events)} Events, "
+                f"{len(affected_persons)} Personen, {len(affected_families)} Familien, "
+                f"{len(affected_places)} Orte, {len(affected_media)} Medien)"
+            ),
             "",
         ]
         for e in affected_events:
@@ -595,44 +730,78 @@ async def merge_citations_tool(client, arguments: Dict) -> List[TextContent]:
             given = pn.get("first_name", "")
             sl = pn.get("surname_list", [])
             surname = sl[0].get("surname", "") if sl else ""
-            lines.append(f"* Person: {given} {surname}".strip() + f" ({p.get('gramps_id', '?')})")
+            lines.append(
+                f"* Person: {given} {surname}".strip() + f" ({p.get('gramps_id', '?')})"
+            )
         for f in affected_families:
             lines.append(f"* Familie ({f.get('gramps_id', '?')})")
         for p in affected_places:
-            lines.append(f"* Ort: {p.get('name', {}).get('value', '?')} ({p.get('gramps_id', '?')})")
+            lines.append(
+                f"* Ort: {p.get('name', {}).get('value', '?')} ({p.get('gramps_id', '?')})"
+            )
         for m in affected_media:
             lines.append(f"* Medium ({m.get('gramps_id', '?')})")
 
         if not dry_run:
             for event in affected_events:
                 await client.make_api_call(
-                    ApiCalls.PUT_EVENT, tree_id=tree_id, handle=event["handle"],
-                    params={"handle": event["handle"],
-                            "citation_list": _replace_citation(event.get("citation_list", []))}
+                    ApiCalls.PUT_EVENT,
+                    tree_id=tree_id,
+                    handle=event["handle"],
+                    params={
+                        "handle": event["handle"],
+                        "citation_list": _replace_citation(
+                            event.get("citation_list", [])
+                        ),
+                    },
                 )
             for person in affected_persons:
                 await client.make_api_call(
-                    ApiCalls.PUT_PERSON, tree_id=tree_id, handle=person["handle"],
-                    params={"handle": person["handle"],
-                            "citation_list": _replace_citation(person.get("citation_list", []))}
+                    ApiCalls.PUT_PERSON,
+                    tree_id=tree_id,
+                    handle=person["handle"],
+                    params={
+                        "handle": person["handle"],
+                        "citation_list": _replace_citation(
+                            person.get("citation_list", [])
+                        ),
+                    },
                 )
             for family in affected_families:
                 await client.make_api_call(
-                    ApiCalls.PUT_FAMILY, tree_id=tree_id, handle=family["handle"],
-                    params={"handle": family["handle"],
-                            "citation_list": _replace_citation(family.get("citation_list", []))}
+                    ApiCalls.PUT_FAMILY,
+                    tree_id=tree_id,
+                    handle=family["handle"],
+                    params={
+                        "handle": family["handle"],
+                        "citation_list": _replace_citation(
+                            family.get("citation_list", [])
+                        ),
+                    },
                 )
             for place in affected_places:
                 await client.make_api_call(
-                    ApiCalls.PUT_PLACE, tree_id=tree_id, handle=place["handle"],
-                    params={"handle": place["handle"],
-                            "citation_list": _replace_citation(place.get("citation_list", []))}
+                    ApiCalls.PUT_PLACE,
+                    tree_id=tree_id,
+                    handle=place["handle"],
+                    params={
+                        "handle": place["handle"],
+                        "citation_list": _replace_citation(
+                            place.get("citation_list", [])
+                        ),
+                    },
                 )
             for media in affected_media:
                 await client.make_api_call(
-                    ApiCalls.PUT_MEDIA_ITEM, tree_id=tree_id, handle=media["handle"],
-                    params={"handle": media["handle"],
-                            "citation_list": _replace_citation(media.get("citation_list", []))}
+                    ApiCalls.PUT_MEDIA_ITEM,
+                    tree_id=tree_id,
+                    handle=media["handle"],
+                    params={
+                        "handle": media["handle"],
+                        "citation_list": _replace_citation(
+                            media.get("citation_list", [])
+                        ),
+                    },
                 )
             await client.make_api_call(
                 ApiCalls.DELETE_CITATION, tree_id=tree_id, handle=loser_handle
@@ -692,14 +861,17 @@ async def find_duplicate_citations_tool(client, arguments: Dict) -> List[TextCon
         # Filter by source name if requested
         if source_filter:
             duplicates = {
-                k: v for k, v in duplicates.items()
+                k: v
+                for k, v in duplicates.items()
                 if source_filter in source_cache.get(k[0], "").lower()
             }
             if not duplicates:
                 return [TextContent(type="text", text="Keine Duplikate gefunden.")]
 
         # Sort by count descending, limit output
-        sorted_groups = sorted(duplicates.items(), key=lambda x: -len(x[1]))[:max_results]
+        sorted_groups = sorted(duplicates.items(), key=lambda x: -len(x[1]))[
+            :max_results
+        ]
 
         total = sum(len(v) - 1 for v in duplicates.values())
         lines = [
@@ -742,12 +914,14 @@ async def merge_families_tool(client, arguments: Dict) -> List[TextContent]:
         tree_id = settings.gramps_tree_id
 
         winners = await client.make_api_call(
-            ApiCalls.GET_FAMILIES, tree_id=tree_id,
-            params={"gramps_id": winner_id, "pagesize": 1}
+            ApiCalls.GET_FAMILIES,
+            tree_id=tree_id,
+            params={"gramps_id": winner_id, "pagesize": 1},
         )
         losers = await client.make_api_call(
-            ApiCalls.GET_FAMILIES, tree_id=tree_id,
-            params={"gramps_id": loser_id, "pagesize": 1}
+            ApiCalls.GET_FAMILIES,
+            tree_id=tree_id,
+            params={"gramps_id": loser_id, "pagesize": 1},
         )
         if not winners:
             return [TextContent(type="text", text=f"Winner {winner_id} nicht gefunden")]
@@ -767,6 +941,7 @@ async def merge_families_tool(client, arguments: Dict) -> List[TextContent]:
 
             Items are either dicts (with a 'ref' key) or plain handle strings.
             """
+
             def _key(i):
                 return i.get("ref") if isinstance(i, dict) else i
 
@@ -781,11 +956,16 @@ async def merge_families_tool(client, arguments: Dict) -> List[TextContent]:
             winner.get("event_ref_list", []), loser.get("event_ref_list", [])
         )
         merged_cits = winner.get("citation_list", []) + [
-            c for c in loser.get("citation_list", [])
+            c
+            for c in loser.get("citation_list", [])
             if c not in winner.get("citation_list", [])
         ]
-        merged_notes = _merge_ref_list(winner.get("note_list", []), loser.get("note_list", []))
-        merged_media = _merge_ref_list(winner.get("media_list", []), loser.get("media_list", []))
+        merged_notes = _merge_ref_list(
+            winner.get("note_list", []), loser.get("note_list", [])
+        )
+        merged_media = _merge_ref_list(
+            winner.get("media_list", []), loser.get("media_list", [])
+        )
 
         new_children = len(merged_children) - len(winner.get("child_ref_list", []))
         new_events = len(merged_events) - len(winner.get("event_ref_list", []))
@@ -794,8 +974,12 @@ async def merge_families_tool(client, arguments: Dict) -> List[TextContent]:
         all_persons = await client.make_api_call(
             ApiCalls.GET_PEOPLE, tree_id=tree_id, params={"pagesize": 99999}
         )
-        affected_as_parent = [p for p in all_persons if loser_handle in p.get("family_list", [])]
-        affected_as_child = [p for p in all_persons if loser_handle in p.get("parent_family_list", [])]
+        affected_as_parent = [
+            p for p in all_persons if loser_handle in p.get("family_list", [])
+        ]
+        affected_as_child = [
+            p for p in all_persons if loser_handle in p.get("parent_family_list", [])
+        ]
 
         prefix = "[DRY RUN] " if dry_run else ""
         lines = [
@@ -815,7 +999,9 @@ async def merge_families_tool(client, arguments: Dict) -> List[TextContent]:
         if not dry_run:
             # Update winner: merge children, events, citations, notes, media
             await client.make_api_call(
-                ApiCalls.PUT_FAMILY, tree_id=tree_id, handle=winner_handle,
+                ApiCalls.PUT_FAMILY,
+                tree_id=tree_id,
+                handle=winner_handle,
                 params={
                     "handle": winner_handle,
                     "child_ref_list": merged_children,
@@ -823,23 +1009,31 @@ async def merge_families_tool(client, arguments: Dict) -> List[TextContent]:
                     "citation_list": merged_cits,
                     "note_list": merged_notes,
                     "media_list": merged_media,
-                }
+                },
             )
             # Redirect person family_list references
             for p in affected_as_parent:
-                new_fl = [winner_handle if h == loser_handle else h
-                          for h in p.get("family_list", [])]
+                new_fl = [
+                    winner_handle if h == loser_handle else h
+                    for h in p.get("family_list", [])
+                ]
                 await client.make_api_call(
-                    ApiCalls.PUT_PERSON, tree_id=tree_id, handle=p["handle"],
-                    params={"handle": p["handle"], "family_list": new_fl}
+                    ApiCalls.PUT_PERSON,
+                    tree_id=tree_id,
+                    handle=p["handle"],
+                    params={"handle": p["handle"], "family_list": new_fl},
                 )
             # Redirect person parent_family_list references
             for p in affected_as_child:
-                new_pfl = [winner_handle if h == loser_handle else h
-                           for h in p.get("parent_family_list", [])]
+                new_pfl = [
+                    winner_handle if h == loser_handle else h
+                    for h in p.get("parent_family_list", [])
+                ]
                 await client.make_api_call(
-                    ApiCalls.PUT_PERSON, tree_id=tree_id, handle=p["handle"],
-                    params={"handle": p["handle"], "parent_family_list": new_pfl}
+                    ApiCalls.PUT_PERSON,
+                    tree_id=tree_id,
+                    handle=p["handle"],
+                    params={"handle": p["handle"], "parent_family_list": new_pfl},
                 )
             await client.make_api_call(
                 ApiCalls.DELETE_FAMILY, tree_id=tree_id, handle=loser_handle
@@ -874,7 +1068,9 @@ async def find_duplicate_events_tool(client, arguments: Dict) -> List[TextConten
         )
 
         if gramps_id_filter:
-            all_persons = [p for p in all_persons if p.get("gramps_id") == gramps_id_filter]
+            all_persons = [
+                p for p in all_persons if p.get("gramps_id") == gramps_id_filter
+            ]
 
         duplicates = []
         for person in all_persons:
@@ -897,11 +1093,14 @@ async def find_duplicate_events_tool(client, arguments: Dict) -> List[TextConten
                     )
                     etype = ev.get("type", "?")
                     date = ev.get("date", {})
-                    dateval = tuple(date.get("dateval", [])) if isinstance(date, dict) else ()
+                    dateval = (
+                        tuple(date.get("dateval", [])) if isinstance(date, dict) else ()
+                    )
                     modifier = date.get("modifier", 0) if isinstance(date, dict) else 0
                     key = (etype, dateval, modifier)
-                    events_data.append((key, etype, ev.get("gramps_id", "?"), eh,
-                                        format_date(date)))
+                    events_data.append(
+                        (key, etype, ev.get("gramps_id", "?"), eh, format_date(date))
+                    )
                 except Exception:
                     continue
 
@@ -917,7 +1116,8 @@ async def find_duplicate_events_tool(client, arguments: Dict) -> List[TextConten
         shown = duplicates[:max_results]
         lines = [
             f"Duplikat-Events: {len(duplicates)} Gruppen, {total} überflüssige Events",
-            f"(Zeige {len(shown)} von {len(duplicates)})", "",
+            f"(Zeige {len(shown)} von {len(duplicates)})",
+            "",
         ]
         for name, pid, items in shown:
             etype = items[0][3]

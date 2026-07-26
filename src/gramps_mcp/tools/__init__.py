@@ -17,7 +17,7 @@
 """
 Unified interface for all MCP tools.
 
-This module exports 38 genealogy tools organized by category:
+This module exports 42 genealogy tools organized by category:
 - Search & Discovery Tools (11): find_*, get_person, get_family
 - Data Management Tools (9): create_*
 - Analysis Tools (4): tree_stats, ancestors, descendants, recent_changes
@@ -25,6 +25,7 @@ This module exports 38 genealogy tools organized by category:
 - Merge Tools (3): find_duplicate_persons, merge_persons, split_person
 - Link Edit Tools (6): add/remove_event_to/from_person, add/remove_event_to/from_family, remove_child_from_family, move_attachment
 - Citation Link Tools (2): add/remove_citation_to/from_event
+- Note Link Tools (4): add/remove_note_to/from_person, add/remove_note_to/from_family
 """
 
 # Search & Discovery Tools (10 tools)
@@ -34,6 +35,10 @@ from .analysis import (
     get_descendants_tool,
     get_recent_changes_tool,
     get_tree_info_tool,
+)
+from .citation_link import (
+    add_citation_to_event_tool,
+    remove_citation_from_event_tool,
 )
 
 # Data Management Tools (9 tools)
@@ -53,10 +58,24 @@ from .database import (
     list_databases_tool,
     open_database_tool,
 )
+from .link_edit import (
+    add_event_to_family_tool,
+    add_event_to_person_tool,
+    move_attachment_tool,
+    remove_child_from_family_tool,
+    remove_event_from_family_tool,
+    remove_event_from_person_tool,
+)
 from .merge_persons import (
     find_duplicate_persons_tool,
     merge_persons_tool,
     split_person_tool,
+)
+from .note_link import (
+    add_note_to_family_tool,
+    add_note_to_person_tool,
+    remove_note_from_family_tool,
+    remove_note_from_person_tool,
 )
 from .search_basic import (
     find_anything_tool,
@@ -72,18 +91,6 @@ from .search_basic import (
 from .search_details import (
     get_family_tool,
     get_person_tool,
-)
-from .link_edit import (
-    add_event_to_family_tool,
-    add_event_to_person_tool,
-    move_attachment_tool,
-    remove_child_from_family_tool,
-    remove_event_from_family_tool,
-    remove_event_from_person_tool,
-)
-from .citation_link import (
-    add_citation_to_event_tool,
-    remove_citation_from_event_tool,
 )
 
 # Export all tools for easy import
@@ -133,4 +140,9 @@ __all__ = [
     # Citation Link Tools (SQLite backend only)
     "add_citation_to_event_tool",
     "remove_citation_from_event_tool",
+    # Note Link Tools (SQLite backend only)
+    "add_note_to_person_tool",
+    "add_note_to_family_tool",
+    "remove_note_from_person_tool",
+    "remove_note_from_family_tool",
 ]
