@@ -164,3 +164,71 @@ async def add_note_to_person_tool(
         },
         ensure_ascii=False,
     ))]
+
+
+async def add_note_to_family_tool(
+    family_handle: Optional[str] = None,
+    family_gramps_id: Optional[str] = None,
+    note_handle: Optional[str] = None,
+    note_gramps_id: Optional[str] = None,
+    text: Optional[str] = None,
+    type: Optional[str] = None,
+    db: Any = None,
+) -> List[TextContent]:
+    """
+    Link a note to a family, creating or updating the note in the same call.
+
+    Same three modes as add_note_to_person_tool.
+
+    Args:
+        family_handle: Handle of the family.
+        family_gramps_id: Gramps ID of the family (alternative to family_handle).
+        note_handle: Handle of an existing note to link or update.
+        note_gramps_id: Gramps ID of an existing note (alternative to note_handle).
+        text: Note text. Required when note_handle/note_gramps_id are both omitted.
+        type: Note type (e.g. 'Research'). Required when note_handle/note_gramps_id
+            are both omitted.
+        db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
+
+    Returns:
+        List[TextContent] with JSON result.
+
+    Raises:
+        GrampsAPIError: If backend is not SQLite, family/note not found, or
+                        neither an identifier nor text/type is given.
+    """
+    db = _require_sqlite_db(db, "add_note_to_family")
+    conn = db._conn
+
+    family_handle = _resolve_handle(conn, "family", family_handle, family_gramps_id, "Family")
+    # Read (and thus validate existence of) the family BEFORE touching the note —
+    # same rationale as add_note_to_person_tool: a raw handle is never existence-
+    # checked by _resolve_handle, so this must happen before _upsert_note commits
+    # any note create/update.
+    family_data = _read_object(conn, "family", family_handle, "Family")
+
+    note_handle_final, note_gramps_id_final, note_result = _upsert_note(
+        conn, db, note_handle, note_gramps_id, text, type
+    )
+
+    note_list = family_data.get("note_list", [])
+
+    if note_handle_final in note_list:
+        result = note_result or "no_change"
+    else:
+        note_list.append(note_handle_final)
+        family_data["note_list"] = note_list
+        with conn:
+            _write_object(conn, "family", family_handle, family_data)
+        result = note_result or "linked"
+
+    return [TextContent(type="text", text=json.dumps(
+        {
+            "result": result,
+            "note_handle": note_handle_final,
+            "note_gramps_id": note_gramps_id_final,
+            "family_handle": family_handle,
+            "note_count": len(note_list),
+        },
+        ensure_ascii=False,
+    ))]

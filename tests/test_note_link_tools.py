@@ -102,6 +102,23 @@ def _insert_note(conn, handle: str, gramps_id: str,
     conn.commit()
 
 
+def _insert_family(conn, handle: str, gramps_id: str, note_list=None) -> None:
+    data = {
+        "_class": "Family", "handle": handle, "gramps_id": gramps_id,
+        "father_handle": None, "mother_handle": None,
+        "child_ref_list": [],
+        "type": {"_class": "FamilyRelType", "value": 0, "string": ""},
+        "event_ref_list": [], "media_list": [],
+        "attribute_list": [], "lds_ord_list": [], "citation_list": [],
+        "note_list": note_list or [], "tag_list": [], "change": 0, "private": False,
+    }
+    conn.execute(
+        "INSERT INTO family (handle, gramps_id, json_data, change, private) VALUES (?,?,?,0,0)",
+        (handle, gramps_id, json.dumps(data)),
+    )
+    conn.commit()
+
+
 # ===========================================================================
 # add_note_to_person
 # ===========================================================================
@@ -257,4 +274,85 @@ class TestAddNoteToPerson:
         with pytest.raises(GrampsAPIError, match="not found"):
             asyncio.run(
                 add_note_to_person_tool(person_handle="missing", note_handle="h_no", db=db)
+            )
+
+
+# ===========================================================================
+# add_note_to_family
+# ===========================================================================
+
+class TestAddNoteToFamily:
+    def test_link_existing_note(self, fresh_db):
+        from gramps_mcp.tools.note_link import add_note_to_family_tool
+
+        db, conn = fresh_db
+        _insert_family(conn, "h_fa", "F0001")
+        _insert_note(conn, "h_no", "N0001")
+
+        result = asyncio.run(
+            add_note_to_family_tool(family_handle="h_fa", note_handle="h_no", db=db)
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "linked"
+        assert data["family_handle"] == "h_fa"
+        assert data["note_count"] == 1
+
+        row = conn.execute("SELECT json_data FROM family WHERE handle = 'h_fa'").fetchone()
+        assert "h_no" in json.loads(row["json_data"])["note_list"]
+
+    def test_link_idempotent(self, fresh_db):
+        from gramps_mcp.tools.note_link import add_note_to_family_tool
+
+        db, conn = fresh_db
+        _insert_family(conn, "h_fa", "F0001")
+        _insert_note(conn, "h_no", "N0001")
+
+        asyncio.run(add_note_to_family_tool(family_handle="h_fa", note_handle="h_no", db=db))
+        result = asyncio.run(
+            add_note_to_family_tool(family_handle="h_fa", note_handle="h_no", db=db)
+        )
+        assert json.loads(result[0].text)["result"] == "no_change"
+
+    def test_create_new_note(self, fresh_db):
+        from gramps_mcp.tools.note_link import add_note_to_family_tool
+
+        db, conn = fresh_db
+        _insert_family(conn, "h_fa", "F0001")
+
+        result = asyncio.run(
+            add_note_to_family_tool(
+                family_handle="h_fa", text="Family research note", type="Research", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "created"
+        new_handle = data["note_handle"]
+
+        row = conn.execute("SELECT json_data FROM family WHERE handle = 'h_fa'").fetchone()
+        assert new_handle in json.loads(row["json_data"])["note_list"]
+
+    def test_update_existing_note(self, fresh_db):
+        from gramps_mcp.tools.note_link import add_note_to_family_tool
+
+        db, conn = fresh_db
+        _insert_family(conn, "h_fa", "F0001", note_list=["h_no"])
+        _insert_note(conn, "h_no", "N0001", text="Old")
+
+        result = asyncio.run(
+            add_note_to_family_tool(family_handle="h_fa", note_handle="h_no", text="New", db=db)
+        )
+        assert json.loads(result[0].text)["result"] == "updated"
+
+        row = conn.execute("SELECT json_data FROM note WHERE handle = 'h_no'").fetchone()
+        assert json.loads(row["json_data"])["text"]["string"] == "New"
+
+    def test_error_unknown_family(self, fresh_db):
+        from gramps_mcp.tools.note_link import add_note_to_family_tool
+
+        db, conn = fresh_db
+        _insert_note(conn, "h_no", "N0001")
+
+        with pytest.raises(GrampsAPIError, match="not found"):
+            asyncio.run(
+                add_note_to_family_tool(family_handle="missing", note_handle="h_no", db=db)
             )
