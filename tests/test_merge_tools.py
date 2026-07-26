@@ -32,6 +32,7 @@ import pytest
 
 from gramps_mcp.merge.detect import (
     DuplicateCandidate,
+    _year_from_event,
     find_duplicate_persons,
     normalize,
     similarity_score,
@@ -276,6 +277,29 @@ class TestSimilarityScore:
         assert score_both_missing == 6.0  # base(8) - 2 penalty
         assert score_one_missing == 7.0  # base(8) - 1 penalty (unchanged)
         assert score_both_missing < score_one_missing
+
+
+# ---------------------------------------------------------------------------
+# 2b. _year_from_event — free-text date fallback
+# ---------------------------------------------------------------------------
+
+class TestYearFromEvent:
+    def test_dateval_year_used_when_present(self):
+        ev = {"date": {"dateval": [0, 0, 1830, False]}}
+        assert _year_from_event(ev) == 1830
+
+    def test_falls_back_to_free_text_date(self):
+        # Gramps stores unparsed dates (e.g. "7 Mai 1604") under date.text,
+        # not date.string -- dateval stays [0, 0, 0, False] in that case.
+        ev = {"date": {"dateval": [0, 0, 0, False], "text": "7 Mai 1604"}}
+        assert _year_from_event(ev) == 1604
+
+    def test_no_year_returns_none(self):
+        ev = {"date": {"dateval": [0, 0, 0, False], "text": "unknown"}}
+        assert _year_from_event(ev) is None
+
+    def test_missing_date_returns_none(self):
+        assert _year_from_event({}) is None
 
 
 # ---------------------------------------------------------------------------
