@@ -212,6 +212,7 @@ class TestAddNoteToPerson:
 
     def test_create_new_note(self, fresh_db):
         from gramps_mcp.tools.note_link import add_note_to_person_tool
+        from gramps_mcp._gramps_sqlite import NOTE_TYPE
 
         db, conn = fresh_db
         _insert_person(conn, "h_pe", "I0001")
@@ -231,7 +232,11 @@ class TestAddNoteToPerson:
         ).fetchone()
         note_data = json.loads(row["json_data"])
         assert note_data["text"]["string"] == "Brand new note"
-        assert note_data["type"]["string"] == "Research"
+        # "Research" is a recognized NoteType, so db.put's denormalization (via
+        # _denorm_type) stores it as {value: 2, string: ""} — value is the source
+        # of truth for known types, string is only populated for custom/unrecognized
+        # ones. Look the value back up in NOTE_TYPE rather than checking "string".
+        assert NOTE_TYPE[note_data["type"]["value"]] == "Research"
 
         prow = conn.execute("SELECT json_data FROM person WHERE handle = 'h_pe'").fetchone()
         person_data = json.loads(prow["json_data"])
@@ -439,11 +444,16 @@ async def add_note_to_person_tool(
     conn = db._conn
 
     person_handle = _resolve_handle(conn, "person", person_handle, person_gramps_id, "Person")
+    # Read (and thus validate existence of) the person BEFORE touching the note.
+    # _resolve_handle only confirms existence when gramps_id is given — a raw
+    # handle is returned unchecked — so without this, _upsert_note could create
+    # or mutate a Note and commit it before we discover the person doesn't exist.
+    person_data = _read_object(conn, "person", person_handle, "Person")
+
     note_handle_final, note_gramps_id_final, note_result = _upsert_note(
         conn, db, note_handle, note_gramps_id, text, type
     )
 
-    person_data = _read_object(conn, "person", person_handle, "Person")
     note_list = person_data.get("note_list", [])
 
     if note_handle_final in note_list:
@@ -642,11 +652,16 @@ async def add_note_to_family_tool(
     conn = db._conn
 
     family_handle = _resolve_handle(conn, "family", family_handle, family_gramps_id, "Family")
+    # Read (and thus validate existence of) the family BEFORE touching the note —
+    # same rationale as add_note_to_person_tool: a raw handle is never existence-
+    # checked by _resolve_handle, so this must happen before _upsert_note commits
+    # any note create/update.
+    family_data = _read_object(conn, "family", family_handle, "Family")
+
     note_handle_final, note_gramps_id_final, note_result = _upsert_note(
         conn, db, note_handle, note_gramps_id, text, type
     )
 
-    family_data = _read_object(conn, "family", family_handle, "Family")
     note_list = family_data.get("note_list", [])
 
     if note_handle_final in note_list:
