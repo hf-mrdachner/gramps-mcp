@@ -63,7 +63,9 @@ def _upsert_note(
 
     resolved_handle: Optional[str] = None
     if has_identifier:
-        resolved_handle = _resolve_handle(conn, "note", note_handle, note_gramps_id, "Note")
+        resolved_handle = _resolve_handle(
+            conn, "note", note_handle, note_gramps_id, "Note"
+        )
         # _resolve_handle only confirms existence when gramps_id is given; when a
         # raw handle is passed directly it returns it without a DB lookup, so we
         # must verify the note exists here in both code paths.
@@ -132,7 +134,9 @@ async def add_note_to_person_tool(
     db = _require_sqlite_db(db, "add_note_to_person")
     conn = db._conn
 
-    person_handle = _resolve_handle(conn, "person", person_handle, person_gramps_id, "Person")
+    person_handle = _resolve_handle(
+        conn, "person", person_handle, person_gramps_id, "Person"
+    )
     # Read (and thus validate existence of) the person BEFORE touching the note.
     # _resolve_handle only confirms existence when gramps_id is given — a raw
     # handle is returned unchecked — so without this, _upsert_note could create
@@ -154,16 +158,21 @@ async def add_note_to_person_tool(
             _write_person(conn, person_handle, person_data)
         result = note_result or "linked"
 
-    return [TextContent(type="text", text=json.dumps(
-        {
-            "result": result,
-            "note_handle": note_handle_final,
-            "note_gramps_id": note_gramps_id_final,
-            "person_handle": person_handle,
-            "note_count": len(note_list),
-        },
-        ensure_ascii=False,
-    ))]
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(
+                {
+                    "result": result,
+                    "note_handle": note_handle_final,
+                    "note_gramps_id": note_gramps_id_final,
+                    "person_handle": person_handle,
+                    "note_count": len(note_list),
+                },
+                ensure_ascii=False,
+            ),
+        )
+    ]
 
 
 async def add_note_to_family_tool(
@@ -200,7 +209,9 @@ async def add_note_to_family_tool(
     db = _require_sqlite_db(db, "add_note_to_family")
     conn = db._conn
 
-    family_handle = _resolve_handle(conn, "family", family_handle, family_gramps_id, "Family")
+    family_handle = _resolve_handle(
+        conn, "family", family_handle, family_gramps_id, "Family"
+    )
     # Read (and thus validate existence of) the family BEFORE touching the note —
     # same rationale as add_note_to_person_tool: a raw handle is never existence-
     # checked by _resolve_handle, so this must happen before _upsert_note commits
@@ -222,16 +233,21 @@ async def add_note_to_family_tool(
             _write_object(conn, "family", family_handle, family_data)
         result = note_result or "linked"
 
-    return [TextContent(type="text", text=json.dumps(
-        {
-            "result": result,
-            "note_handle": note_handle_final,
-            "note_gramps_id": note_gramps_id_final,
-            "family_handle": family_handle,
-            "note_count": len(note_list),
-        },
-        ensure_ascii=False,
-    ))]
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(
+                {
+                    "result": result,
+                    "note_handle": note_handle_final,
+                    "note_gramps_id": note_gramps_id_final,
+                    "family_handle": family_handle,
+                    "note_count": len(note_list),
+                },
+                ensure_ascii=False,
+            ),
+        )
+    ]
 
 
 async def remove_note_from_person_tool(
@@ -263,7 +279,9 @@ async def remove_note_from_person_tool(
     db = _require_sqlite_db(db, "remove_note_from_person")
     conn = db._conn
 
-    person_handle = _resolve_handle(conn, "person", person_handle, person_gramps_id, "Person")
+    person_handle = _resolve_handle(
+        conn, "person", person_handle, person_gramps_id, "Person"
+    )
     note_handle = _resolve_handle(conn, "note", note_handle, note_gramps_id, "Note")
 
     person_data = _read_object(conn, "person", person_handle, "Person")
@@ -280,15 +298,20 @@ async def remove_note_from_person_tool(
     with conn:
         _write_person(conn, person_handle, person_data)
 
-    return [TextContent(type="text", text=json.dumps(
-        {
-            "result": "ok",
-            "note_handle": note_handle,
-            "person_handle": person_handle,
-            "note_count": len(new_list),
-        },
-        ensure_ascii=False,
-    ))]
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(
+                {
+                    "result": "ok",
+                    "note_handle": note_handle,
+                    "person_handle": person_handle,
+                    "note_count": len(new_list),
+                },
+                ensure_ascii=False,
+            ),
+        )
+    ]
 
 
 async def remove_note_from_family_tool(
@@ -320,7 +343,9 @@ async def remove_note_from_family_tool(
     db = _require_sqlite_db(db, "remove_note_from_family")
     conn = db._conn
 
-    family_handle = _resolve_handle(conn, "family", family_handle, family_gramps_id, "Family")
+    family_handle = _resolve_handle(
+        conn, "family", family_handle, family_gramps_id, "Family"
+    )
     note_handle = _resolve_handle(conn, "note", note_handle, note_gramps_id, "Note")
 
     family_data = _read_object(conn, "family", family_handle, "Family")
@@ -337,12 +362,17 @@ async def remove_note_from_family_tool(
     with conn:
         _write_object(conn, "family", family_handle, family_data)
 
-    return [TextContent(type="text", text=json.dumps(
-        {
-            "result": "ok",
-            "note_handle": note_handle,
-            "family_handle": family_handle,
-            "note_count": len(new_list),
-        },
-        ensure_ascii=False,
-    ))]
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(
+                {
+                    "result": "ok",
+                    "note_handle": note_handle,
+                    "family_handle": family_handle,
+                    "note_count": len(new_list),
+                },
+                ensure_ascii=False,
+            ),
+        )
+    ]
