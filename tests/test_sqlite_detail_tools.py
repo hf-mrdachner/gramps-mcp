@@ -171,6 +171,65 @@ class TestGetPlaceTool:
 
 
 # ---------------------------------------------------------------------------
+# get_note_tool
+# ---------------------------------------------------------------------------
+
+class TestGetNoteTool:
+    @pytest.mark.asyncio
+    async def test_returns_full_note_text(self, write_client):
+        from gramps_mcp.tools.search_details import get_note_tool
+        # N0001 = "John Smith was a notable person in his community." (h_no_john)
+        result = await get_note_tool.__wrapped__(write_client, {"gramps_id": "N0001"})
+        text = _result_text(result)
+        assert "N0001" in text
+        assert "John Smith was a notable person in his community." in text
+
+    @pytest.mark.asyncio
+    async def test_not_found(self, write_client):
+        from gramps_mcp.tools.search_details import get_note_tool
+        result = await get_note_tool.__wrapped__(write_client, {"gramps_id": "N9999"})
+        assert "not found" in _result_text(result)
+
+    @pytest.mark.asyncio
+    async def test_missing_gramps_id(self, write_client):
+        from gramps_mcp.tools.search_details import get_note_tool
+        result = await get_note_tool.__wrapped__(write_client, {})
+        assert "Error" in _result_text(result)
+
+    @pytest.mark.asyncio
+    async def test_backlinks_person_and_family(self, write_client):
+        from gramps_mcp.tools.search_details import get_note_tool
+        # N0001 (h_no_john) is linked to person I0001 and family F0001 in conftest_sqlite
+        result = await get_note_tool.__wrapped__(write_client, {"gramps_id": "N0001"})
+        text = _result_text(result)
+        assert "I0001" in text
+        assert "F0001" in text
+
+    @pytest.mark.asyncio
+    async def test_no_backlinks_found(self, write_client):
+        from gramps_mcp.tools.search_details import get_note_tool
+
+        conn = write_client._db._conn
+        data = {
+            "_class": "Note", "handle": "h_no_orphan", "gramps_id": "N0099", "format": 0,
+            "text": {"_class": "StyledText", "string": "Orphan note", "tags": []},
+            "type": {"_class": "NoteType", "value": 1, "string": "General"},
+            "tag_list": [], "change": 0, "private": False,
+        }
+        conn.execute(
+            "INSERT INTO note (handle, gramps_id, json_data, format, change, private) "
+            "VALUES (?,?,?,0,0,0)",
+            ("h_no_orphan", "N0099", json.dumps(data)),
+        )
+        conn.commit()
+
+        result = await get_note_tool.__wrapped__(write_client, {"gramps_id": "N0099"})
+        text = _result_text(result)
+        assert "Orphan note" in text
+        assert "Keine Verkn" in text  # "Keine Verknüpfungen gefunden"
+
+
+# ---------------------------------------------------------------------------
 # merge_places_tool (dry_run + write)
 # ---------------------------------------------------------------------------
 

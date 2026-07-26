@@ -244,6 +244,66 @@ async def get_place_tool(client, arguments: Dict) -> List[TextContent]:
 
 
 @with_client
+async def get_note_tool(client, arguments: Dict) -> List[TextContent]:
+    """
+    Get full note text by gramps_id and find which persons/families have it linked.
+    Scans all persons and families — fact-based, no guessing. Notes attached only to
+    other object types (events, citations, sources, places, media) are not found here.
+    """
+    try:
+        from ..gramps_id import resolve_handles
+        arguments = await resolve_handles(arguments, {"handle": "note"}, client)
+        handle = arguments.get("handle")
+        settings = get_settings()
+        tree_id = settings.gramps_tree_id
+        if not handle:
+            raise ValueError("gramps_id is required")
+        note = await client.make_api_call(ApiCalls.GET_NOTE, tree_id=tree_id, handle=handle)
+        if not note:
+            return [TextContent(type="text", text=f"Note {handle} not found")]
+        gramps_id = note.get("gramps_id", handle)
+        note_type = note.get("type", "Unknown")
+        text = note.get("text", {}).get("string", "")
+
+        lines = [f"## {note_type} Note — {gramps_id} [{handle}]", "", text, ""]
+
+        # Find persons and families with this note linked — scan all, GQL cannot search inside arrays
+        all_persons = await client.make_api_call(
+            ApiCalls.GET_PEOPLE, tree_id=tree_id, params={"pagesize": 99999}
+        )
+        all_families = await client.make_api_call(
+            ApiCalls.GET_FAMILIES, tree_id=tree_id, params={"pagesize": 99999}
+        )
+
+        found = []
+        for person in all_persons:
+            if handle in person.get("note_list", []):
+                pn = person.get("primary_name", {})
+                given = pn.get("first_name", "")
+                sl = pn.get("surname_list", [])
+                surname = sl[0].get("surname", "") if sl else ""
+                name = f"{given} {surname}".strip() or "?"
+                pid = person.get("gramps_id", "")
+                found.append(f"* Person: {name} ({pid})")
+
+        for family in all_families:
+            if handle in family.get("note_list", []):
+                fid = family.get("gramps_id", "")
+                found.append(f"* Familie: {fid}")
+
+        lines.append("**Verlinkt mit:**")
+        if found:
+            lines.extend(found)
+        else:
+            lines.append("* Keine Verknüpfungen gefunden")
+
+        return [TextContent(type="text", text="\n".join(lines))]
+
+    except Exception as e:
+        return _format_error_response(e, "note details retrieval")
+
+
+@with_client
 async def merge_places_tool(client, arguments: Dict) -> List[TextContent]:
     """
     Merge a duplicate place (loser) into a canonical place (winner).

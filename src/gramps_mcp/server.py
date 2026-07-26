@@ -128,6 +128,7 @@ from .tools.search_details import (
     find_duplicate_events_tool,
     get_event_tool,
     get_family_tool,
+    get_note_tool,
     get_person_tool,
     get_place_tool,
     get_type_tool,
@@ -203,6 +204,10 @@ class GetFamilyParams(BaseModel):
 
 class GetPlaceParams(BaseModel):
     gramps_id: str = Field(..., description="Gramps place ID (e.g. 'P0001')")
+
+
+class GetNoteParams(BaseModel):
+    gramps_id: str = Field(..., description="Gramps note ID (e.g. 'N0001')")
 
 
 class MergePlacesParams(BaseModel):
@@ -465,6 +470,16 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         ),
         "schema": GetPlaceParams,
         "handler": get_place_tool,
+    },
+    "get_note": {
+        "description": (
+            "Get full note text by gramps_id and find which persons/families have this "
+            "note linked. Scans all persons and families — fact-based, no guessing. "
+            "Notes attached only to other object types (events, citations, sources, "
+            "places, media) are not found by this scan."
+        ),
+        "schema": GetNoteParams,
+        "handler": get_note_tool,
     },
     "merge_places": {
         "description": (
@@ -844,7 +859,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "create_person", "get_person",
         "merge_persons", "split_person", "find_duplicate_persons",
         "add_dna_match", "get_dna_matches", "update_dna_match",
-        "add_note_to_person", "remove_note_from_person",
+        "add_note_to_person", "remove_note_from_person", "get_note",
     ],
     "event": [
         "create_event", "get_event",
@@ -859,7 +874,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "create_family", "get_family",
         "merge_families", "remove_child_from_family",
         "add_event_to_family", "remove_event_from_family",
-        "add_note_to_family", "remove_note_from_family",
+        "add_note_to_family", "remove_note_from_family", "get_note",
     ],
     "search": [
         "find_anything", "find_type", "get_type",
