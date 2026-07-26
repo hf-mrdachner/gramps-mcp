@@ -539,12 +539,14 @@ class TestMergePersonsFamilyEventFixup:
 # ChildRef entries pointing at the winner.
 # ---------------------------------------------------------------------------
 
-def _cref(handle: str) -> dict:
+def _cref(handle: str, citation_list=None, note_list=None) -> dict:
     return {
         "_class": "ChildRef", "ref": handle,
         "frel": {"_class": "ChildRefType", "value": 1, "string": ""},
         "mrel": {"_class": "ChildRefType", "value": 1, "string": ""},
-        "private": False, "citation_list": [], "note_list": [],
+        "private": False,
+        "citation_list": citation_list or [],
+        "note_list": note_list or [],
     }
 
 
@@ -585,3 +587,52 @@ class TestMergePersonsChildRefListDedupe:
         fam_after = json.loads(row["json_data"])
         refs = [c["ref"] for c in fam_after.get("child_ref_list", [])]
         assert refs.count("h_w") == 1, f"Duplicate winner child ref: {refs}"
+
+    def test_citations_and_notes_preserved_from_discarded_duplicate(self):
+        """Citations/notes on the discarded duplicate ChildRef must not be lost."""
+        conn = _make_merge_db()
+
+        fam = {
+            "_class": "Family", "handle": "h_fa", "gramps_id": "F0001",
+            "father_handle": "h_o", "mother_handle": None,
+            "child_ref_list": [
+                _cref("h_w", citation_list=["h_ci_w"]),
+                _cref("h_l", citation_list=["h_ci_l"], note_list=["h_no_l"]),
+            ],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        conn.execute(
+            "INSERT INTO family (handle, gramps_id, json_data, father_handle, mother_handle) "
+            "VALUES (?,?,?,?,?)",
+            ["h_fa", "F0001", json.dumps(fam), "h_o", None],
+        )
+        for h in ("h_w", "h_l"):
+            row = conn.execute(
+                "SELECT json_data FROM person WHERE handle=?", (h,)
+            ).fetchone()
+            p = json.loads(row["json_data"])
+            p["parent_family_list"] = ["h_fa"]
+            conn.execute(
+                "UPDATE person SET json_data=? WHERE handle=?", (json.dumps(p), h)
+            )
+        conn.commit()
+
+        merge_persons(conn, "h_w", "h_l", dry_run=False)
+
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle='h_fa'"
+        ).fetchone()
+        fam_after = json.loads(row["json_data"])
+        refs = fam_after.get("child_ref_list", [])
+        assert len(refs) == 1, f"Expected single deduped entry, got: {refs}"
+        kept = refs[0]
+        assert kept["ref"] == "h_w"
+        assert "h_ci_w" in kept["citation_list"]
+        assert "h_ci_l" in kept["citation_list"], (
+            f"Citation from discarded duplicate was lost: {kept['citation_list']}"
+        )
+        assert "h_no_l" in kept["note_list"], (
+            f"Note from discarded duplicate was lost: {kept['note_list']}"
+        )

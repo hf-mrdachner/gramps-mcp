@@ -399,13 +399,24 @@ def _commit_merge(
                     c["ref"] = winner_handle
                     changed = True
             if child_refs:
-                deduped_refs = []
-                seen_refs: Set[str] = set()
+                # Two ChildRef entries can end up pointing at the same ref
+                # (winner already listed + loser's rewritten entry). Keep the
+                # first entry's frel/mrel, but union citation_list/note_list
+                # from the discarded duplicate(s) so nothing is silently lost.
+                kept_by_ref: Dict[str, dict] = {}
+                order: List[str] = []
                 for c in child_refs:
-                    if c["ref"] in seen_refs:
+                    ref = c["ref"]
+                    if ref not in kept_by_ref:
+                        kept_by_ref[ref] = c
+                        order.append(ref)
                         continue
-                    seen_refs.add(c["ref"])
-                    deduped_refs.append(c)
+                    kept = kept_by_ref[ref]
+                    for field in ("citation_list", "note_list"):
+                        for item in c.get(field, []):
+                            if item not in kept.get(field, []):
+                                kept.setdefault(field, []).append(item)
+                deduped_refs = [kept_by_ref[ref] for ref in order]
                 if len(deduped_refs) != len(child_refs):
                     fam["child_ref_list"] = deduped_refs
                     changed = True
