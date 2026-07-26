@@ -13,7 +13,7 @@ import sqlite3
 import pytest
 from mcp.types import TextContent
 
-from gramps_mcp._gramps_sqlite import GrampsSqliteDB
+from gramps_mcp._gramps_sqlite import GrampsSqliteDB, NOTE_TYPE
 from gramps_mcp.client import GrampsAPIError
 
 _SCHEMA = """
@@ -193,7 +193,11 @@ class TestAddNoteToPerson:
         ).fetchone()
         note_data = json.loads(row["json_data"])
         assert note_data["text"]["string"] == "Brand new note"
-        assert note_data["type"]["string"] == "Research"
+        # "Research" is a recognized NoteType, so db.put's denormalization (via
+        # _denorm_type) stores it as {value: 2, string: ""} — value is the source
+        # of truth for known types, string is only populated for custom/unrecognized
+        # ones. Look the value back up in NOTE_TYPE rather than checking "string".
+        assert NOTE_TYPE[note_data["type"]["value"]] == "Research"
 
         prow = conn.execute("SELECT json_data FROM person WHERE handle = 'h_pe'").fetchone()
         person_data = json.loads(prow["json_data"])

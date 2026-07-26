@@ -13,8 +13,6 @@ db= parameters for testability (same pattern as link_edit.py/citation_link.py).
 """
 
 import json
-import time
-import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from mcp.types import TextContent
@@ -42,7 +40,7 @@ def _upsert_note(
 
     Args:
         conn: Open sqlite3.Connection.
-        db: GrampsSqliteDB (used for next_id on create).
+        db: GrampsSqliteDB (used for db.put on create/update).
         note_handle: Handle of an existing note, or None.
         note_gramps_id: Gramps ID of an existing note, or None.
         text: New note text, or None to leave content untouched (link-only mode).
@@ -82,45 +80,17 @@ def _upsert_note(
         ).fetchone()
         return resolved_handle, (row[0] if row else None), None
 
-    # Update existing note or create new one
+    note_obj: Dict[str, Any] = {}
     if resolved_handle:
-        note_data = _read_object(conn, "note", resolved_handle, "Note")
-        if text is not None:
-            note_data["text"] = {"_class": "StyledText", "string": text, "tags": []}
-        if type is not None:
-            note_data["type"] = {"_class": "NoteType", "value": 1, "string": type}
-        with conn:
-            _write_object(conn, "note", resolved_handle, note_data)
-        return resolved_handle, note_data.get("gramps_id"), "updated"
+        note_obj["handle"] = resolved_handle
+    if text is not None:
+        note_obj["text"] = {"string": text}
+    if type is not None:
+        note_obj["type"] = type
 
-    # Create new note
-    note_handle_new = db.new_handle()
-    note_gramps_id_new = db._next_id("note")
-    note_data_new: Dict[str, Any] = {
-        "_class": "Note",
-        "handle": note_handle_new,
-        "gramps_id": note_gramps_id_new,
-        "format": 0,
-        "text": {"_class": "StyledText", "string": text or "", "tags": []},
-        "type": {"_class": "NoteType", "value": 1, "string": type or ""},
-        "tag_list": [],
-        "change": int(time.time()),
-        "private": False,
-    }
-    with conn:
-        conn.execute(
-            "INSERT INTO note (handle, gramps_id, json_data, format, change, private) "
-            "VALUES (?,?,?,?,?,?)",
-            (
-                note_handle_new,
-                note_gramps_id_new,
-                json.dumps(note_data_new, ensure_ascii=False),
-                0,
-                note_data_new["change"],
-                0,
-            ),
-        )
-    return note_handle_new, note_gramps_id_new, "created"
+    stored_note = db.put("note", note_obj)
+    result = "created" if resolved_handle is None else "updated"
+    return stored_note["handle"], stored_note.get("gramps_id"), result
 
 
 async def add_note_to_person_tool(
@@ -163,11 +133,16 @@ async def add_note_to_person_tool(
     conn = db._conn
 
     person_handle = _resolve_handle(conn, "person", person_handle, person_gramps_id, "Person")
+    # Read (and thus validate existence of) the person BEFORE touching the note.
+    # _resolve_handle only confirms existence when gramps_id is given — a raw
+    # handle is returned unchecked — so without this, _upsert_note could create
+    # or mutate a Note and commit it before we discover the person doesn't exist.
+    person_data = _read_object(conn, "person", person_handle, "Person")
+
     note_handle_final, note_gramps_id_final, note_result = _upsert_note(
         conn, db, note_handle, note_gramps_id, text, type
     )
 
-    person_data = _read_object(conn, "person", person_handle, "Person")
     note_list = person_data.get("note_list", [])
 
     if note_handle_final in note_list:
