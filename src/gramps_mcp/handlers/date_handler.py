@@ -39,8 +39,8 @@ def format_date(date_obj: dict) -> str:
     if not date_obj:
         return "date unknown"
 
-    # Try formatted string first
-    formatted_date = date_obj.get("string", "")
+    # Try free-text date first (Gramps stores unparsed dates under "text")
+    formatted_date = date_obj.get("text", "")
     if formatted_date:
         return formatted_date
 
