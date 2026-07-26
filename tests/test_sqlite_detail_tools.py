@@ -663,6 +663,59 @@ class TestMergeFamiliesTool:
         assert "h_fa_smith" in james_after["parent_family_list"]
 
     @pytest.mark.asyncio
+    async def test_write_redirects_family_list_dedupes(self, write_client):
+        # John already has both h_fa_smith (winner) and h_fa_loser in family_list
+        # (e.g. after a prior person merge). Redirecting loser->winner must not
+        # produce a duplicate h_fa_smith entry.
+        _add_loser_family(write_client._db._conn, "h_fa_loser", "F0002",
+                          father_handle="h_pe_john")
+        row = write_client._db._conn.execute(
+            "SELECT json_data FROM person WHERE handle='h_pe_john'"
+        ).fetchone()
+        john = json.loads(row["json_data"])
+        john["family_list"] = ["h_fa_smith", "h_fa_loser"]
+        write_client._db._conn.execute(
+            "UPDATE person SET json_data=? WHERE handle='h_pe_john'", [json.dumps(john)]
+        )
+        write_client._db._conn.commit()
+
+        from gramps_mcp.tools.search_details import merge_families_tool
+        await merge_families_tool.__wrapped__(
+            write_client, {"winner_id": "F0001", "loser_id": "F0002", "dry_run": False}
+        )
+        row = write_client._db._conn.execute(
+            "SELECT json_data FROM person WHERE handle='h_pe_john'"
+        ).fetchone()
+        john_after = json.loads(row["json_data"])
+        assert john_after["family_list"].count("h_fa_smith") == 1
+
+    @pytest.mark.asyncio
+    async def test_write_redirects_parent_family_list_dedupes(self, write_client):
+        # James already has both h_fa_smith (winner) and h_fa_loser in
+        # parent_family_list. Redirecting must not produce a duplicate entry.
+        _add_loser_family(write_client._db._conn, "h_fa_loser", "F0002",
+                          child_handles=["h_pe_child"])
+        row = write_client._db._conn.execute(
+            "SELECT json_data FROM person WHERE handle='h_pe_child'"
+        ).fetchone()
+        james = json.loads(row["json_data"])
+        james["parent_family_list"] = ["h_fa_smith", "h_fa_loser"]
+        write_client._db._conn.execute(
+            "UPDATE person SET json_data=? WHERE handle='h_pe_child'", [json.dumps(james)]
+        )
+        write_client._db._conn.commit()
+
+        from gramps_mcp.tools.search_details import merge_families_tool
+        await merge_families_tool.__wrapped__(
+            write_client, {"winner_id": "F0001", "loser_id": "F0002", "dry_run": False}
+        )
+        row = write_client._db._conn.execute(
+            "SELECT json_data FROM person WHERE handle='h_pe_child'"
+        ).fetchone()
+        james_after = json.loads(row["json_data"])
+        assert james_after["parent_family_list"].count("h_fa_smith") == 1
+
+    @pytest.mark.asyncio
     async def test_write_merges_child_ref_list(self, write_client):
         # Loser has James (h_pe_child) as an extra child not yet in winner
         _add_loser_family(write_client._db._conn, "h_fa_loser", "F0002",
