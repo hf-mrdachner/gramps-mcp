@@ -356,3 +356,101 @@ class TestAddNoteToFamily:
             asyncio.run(
                 add_note_to_family_tool(family_handle="missing", note_handle="h_no", db=db)
             )
+
+
+# ===========================================================================
+# remove_note_from_person
+# ===========================================================================
+
+class TestRemoveNoteFromPerson:
+    def test_note_removed(self, fresh_db):
+        from gramps_mcp.tools.note_link import remove_note_from_person_tool
+
+        db, conn = fresh_db
+        _insert_note(conn, "h_no", "N0001")
+        _insert_person(conn, "h_pe", "I0001", note_list=["h_no"])
+
+        result = asyncio.run(
+            remove_note_from_person_tool(person_handle="h_pe", note_handle="h_no", db=db)
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+        assert data["note_count"] == 0
+
+        row = conn.execute("SELECT json_data FROM person WHERE handle = 'h_pe'").fetchone()
+        assert "h_no" not in json.loads(row["json_data"])["note_list"]
+
+    def test_second_note_survives(self, fresh_db):
+        from gramps_mcp.tools.note_link import remove_note_from_person_tool
+
+        db, conn = fresh_db
+        _insert_note(conn, "h_no1", "N0001")
+        _insert_note(conn, "h_no2", "N0002")
+        _insert_person(conn, "h_pe", "I0001", note_list=["h_no1", "h_no2"])
+
+        asyncio.run(
+            remove_note_from_person_tool(person_handle="h_pe", note_handle="h_no1", db=db)
+        )
+
+        row = conn.execute("SELECT json_data FROM person WHERE handle = 'h_pe'").fetchone()
+        note_list = json.loads(row["json_data"])["note_list"]
+        assert "h_no1" not in note_list
+        assert "h_no2" in note_list
+
+    def test_error_when_not_linked(self, fresh_db):
+        from gramps_mcp.tools.note_link import remove_note_from_person_tool
+
+        db, conn = fresh_db
+        _insert_note(conn, "h_no", "N0001")
+        _insert_person(conn, "h_pe", "I0001")
+
+        with pytest.raises(GrampsAPIError, match="not linked"):
+            asyncio.run(
+                remove_note_from_person_tool(person_handle="h_pe", note_handle="h_no", db=db)
+            )
+
+    def test_remove_via_gramps_ids(self, fresh_db):
+        from gramps_mcp.tools.note_link import remove_note_from_person_tool
+
+        db, conn = fresh_db
+        _insert_note(conn, "h_no", "N0001")
+        _insert_person(conn, "h_pe", "I0001", note_list=["h_no"])
+
+        result = asyncio.run(
+            remove_note_from_person_tool(
+                person_gramps_id="I0001", note_gramps_id="N0001", db=db
+            )
+        )
+        assert json.loads(result[0].text)["result"] == "ok"
+
+
+# ===========================================================================
+# remove_note_from_family
+# ===========================================================================
+
+class TestRemoveNoteFromFamily:
+    def test_note_removed(self, fresh_db):
+        from gramps_mcp.tools.note_link import remove_note_from_family_tool
+
+        db, conn = fresh_db
+        _insert_note(conn, "h_no", "N0001")
+        _insert_family(conn, "h_fa", "F0001", note_list=["h_no"])
+
+        result = asyncio.run(
+            remove_note_from_family_tool(family_handle="h_fa", note_handle="h_no", db=db)
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+        assert data["note_count"] == 0
+
+    def test_error_when_not_linked(self, fresh_db):
+        from gramps_mcp.tools.note_link import remove_note_from_family_tool
+
+        db, conn = fresh_db
+        _insert_note(conn, "h_no", "N0001")
+        _insert_family(conn, "h_fa", "F0001")
+
+        with pytest.raises(GrampsAPIError, match="not linked"):
+            asyncio.run(
+                remove_note_from_family_tool(family_handle="h_fa", note_handle="h_no", db=db)
+            )

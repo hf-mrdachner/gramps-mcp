@@ -232,3 +232,117 @@ async def add_note_to_family_tool(
         },
         ensure_ascii=False,
     ))]
+
+
+async def remove_note_from_person_tool(
+    person_handle: Optional[str] = None,
+    person_gramps_id: Optional[str] = None,
+    note_handle: Optional[str] = None,
+    note_gramps_id: Optional[str] = None,
+    db: Any = None,
+) -> List[TextContent]:
+    """
+    Remove a note from a person's note_list.
+
+    Does not delete the Note object itself. SQLite backend only.
+
+    Args:
+        person_handle: Handle of the person.
+        person_gramps_id: Gramps ID of the person (alternative to person_handle).
+        note_handle: Handle of the note to unlink.
+        note_gramps_id: Gramps ID of the note (alternative to note_handle).
+        db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
+
+    Returns:
+        List[TextContent] with JSON result, person_handle, note_handle, note_count.
+
+    Raises:
+        GrampsAPIError: If backend is not SQLite, handles not found, or note
+                        not linked to this person.
+    """
+    db = _require_sqlite_db(db, "remove_note_from_person")
+    conn = db._conn
+
+    person_handle = _resolve_handle(conn, "person", person_handle, person_gramps_id, "Person")
+    note_handle = _resolve_handle(conn, "note", note_handle, note_gramps_id, "Note")
+
+    person_data = _read_object(conn, "person", person_handle, "Person")
+    note_list = person_data.get("note_list", [])
+
+    new_list = [h for h in note_list if h != note_handle]
+    if len(new_list) == len(note_list):
+        raise GrampsAPIError(
+            f"Note '{note_handle}' is not linked to person '{person_handle}'"
+        )
+
+    person_data["note_list"] = new_list
+
+    with conn:
+        _write_person(conn, person_handle, person_data)
+
+    return [TextContent(type="text", text=json.dumps(
+        {
+            "result": "ok",
+            "note_handle": note_handle,
+            "person_handle": person_handle,
+            "note_count": len(new_list),
+        },
+        ensure_ascii=False,
+    ))]
+
+
+async def remove_note_from_family_tool(
+    family_handle: Optional[str] = None,
+    family_gramps_id: Optional[str] = None,
+    note_handle: Optional[str] = None,
+    note_gramps_id: Optional[str] = None,
+    db: Any = None,
+) -> List[TextContent]:
+    """
+    Remove a note from a family's note_list.
+
+    Does not delete the Note object itself. SQLite backend only.
+
+    Args:
+        family_handle: Handle of the family.
+        family_gramps_id: Gramps ID of the family (alternative to family_handle).
+        note_handle: Handle of the note to unlink.
+        note_gramps_id: Gramps ID of the note (alternative to note_handle).
+        db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
+
+    Returns:
+        List[TextContent] with JSON result, family_handle, note_handle, note_count.
+
+    Raises:
+        GrampsAPIError: If backend is not SQLite, handles not found, or note
+                        not linked to this family.
+    """
+    db = _require_sqlite_db(db, "remove_note_from_family")
+    conn = db._conn
+
+    family_handle = _resolve_handle(conn, "family", family_handle, family_gramps_id, "Family")
+    note_handle = _resolve_handle(conn, "note", note_handle, note_gramps_id, "Note")
+
+    family_data = _read_object(conn, "family", family_handle, "Family")
+    note_list = family_data.get("note_list", [])
+
+    new_list = [h for h in note_list if h != note_handle]
+    if len(new_list) == len(note_list):
+        raise GrampsAPIError(
+            f"Note '{note_handle}' is not linked to family '{family_handle}'"
+        )
+
+    family_data["note_list"] = new_list
+
+    with conn:
+        _write_object(conn, "family", family_handle, family_data)
+
+    return [TextContent(type="text", text=json.dumps(
+        {
+            "result": "ok",
+            "note_handle": note_handle,
+            "family_handle": family_handle,
+            "note_count": len(new_list),
+        },
+        ensure_ascii=False,
+    ))]
