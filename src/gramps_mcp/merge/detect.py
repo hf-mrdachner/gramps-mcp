@@ -233,44 +233,149 @@ def similarity_score(
             return 0.0, [f"birth year mismatch: {birth_year_1} vs {birth_year_2}"]
     elif birth_year_1 is not None or birth_year_2 is not None:
         score -= 1
+    else:
+        # No birth year on either side means no temporal evidence at all to
+        # tell two same-named people apart (e.g. a father and son sharing a
+        # name) - penalize harder than the single-missing case.
+        score -= 2
+        reasons.append("kein Geburtsjahr bekannt")
 
     return score, reasons
 
 
-def _family_neighbor_handles(person_json: dict, conn: sqlite3.Connection) -> set:
-    """Return handles of all direct relatives (parents, spouses, children)."""
-    neighbors: set = set()
-    handle = person_json.get("handle", "")
-    for fam_h in (person_json.get("parent_family_list", [])
-                  + person_json.get("family_list", [])):
-        row = conn.execute("SELECT json_data FROM family WHERE handle=?", (fam_h,)).fetchone()
-        if row is None:
-            continue
-        fam = json.loads(row["json_data"])
-        for h in [fam.get("father_handle"), fam.get("mother_handle")]:
-            if h and h != handle:
-                neighbors.add(h)
-        for c in fam.get("child_ref_list", []):
-            if c["ref"] != handle:
-                neighbors.add(c["ref"])
-    return neighbors
+def _bulk_family_relations(
+    persons: Dict[str, dict], conn: sqlite3.Connection
+) -> Dict[str, Dict[str, set]]:
+    """
+    Return a person-handle -> role-separated relative-handles mapping.
+
+    Roles are kept apart ("parents", "spouses", "children", "siblings")
+    rather than merged into one neighbor set, resolved from a single bulk
+    family fetch (mirrors _bulk_birth_years). This lets the family bonus
+    require a matching role on both sides: a grandparent and grandchild
+    also touch a common connector (the linking parent), but in mismatched
+    roles (child vs. parent) - that is ordinary kinship, not evidence of a
+    duplicated record, and must not score as one.
+
+    Args:
+        persons: Dict of handle -> augmented person JSON.
+        conn: SQLite connection.
+
+    Returns:
+        Dict mapping each person handle to its role-separated relative sets.
+    """
+    all_fam_handles: set = set()
+    for p in persons.values():
+        all_fam_handles.update(p.get("parent_family_list", []))
+        all_fam_handles.update(p.get("family_list", []))
+
+    families: Dict[str, dict] = {}
+    if all_fam_handles:
+        placeholders = ",".join("?" * len(all_fam_handles))
+        rows = conn.execute(
+            f"SELECT handle, json_data FROM family WHERE handle IN ({placeholders})",
+            list(all_fam_handles),
+        ).fetchall()
+        families = {r["handle"]: json.loads(r["json_data"]) for r in rows}
+
+    relations: Dict[str, Dict[str, set]] = {
+        h: {"parents": set(), "spouses": set(), "children": set(), "siblings": set()}
+        for h in persons
+    }
+    for h, p in persons.items():
+        rel = relations[h]
+        for fam_h in p.get("parent_family_list", []):
+            fam = families.get(fam_h)
+            if fam is None:
+                continue
+            for parent in (fam.get("father_handle"), fam.get("mother_handle")):
+                if parent:
+                    rel["parents"].add(parent)
+            for c in fam.get("child_ref_list", []):
+                if c["ref"] != h:
+                    rel["siblings"].add(c["ref"])
+        for fam_h in p.get("family_list", []):
+            fam = families.get(fam_h)
+            if fam is None:
+                continue
+            for spouse in (fam.get("father_handle"), fam.get("mother_handle")):
+                if spouse and spouse != h:
+                    rel["spouses"].add(spouse)
+            for c in fam.get("child_ref_list", []):
+                rel["children"].add(c["ref"])
+    return relations
+
+
+def _all_relatives(rel: Dict[str, set]) -> set:
+    """Union of every direct-relation category, for the hard exclusion check."""
+    return rel["parents"] | rel["spouses"] | rel["children"] | rel["siblings"]
+
+
+# Naming-after-a-relative (grandparent, uncle/aunt) is a common historical
+# pattern, so a same-named pair up to this many hops apart in the direct-
+# relation graph is treated as ordinary kinship, not a duplicate candidate.
+# 2 hops covers grandparent/grandchild and uncle/aunt-nephew/niece; cousins
+# and great-grandparent/great-grandchild (3+ hops) are left to normal scoring.
+RELATION_EXCLUSION_HOPS = 2
+
+
+def _relatives_within_hops(
+    start: str, all_relatives: Dict[str, set], max_hops: int
+) -> set:
+    """
+    BFS the direct-relation graph up to max_hops from start.
+
+    Args:
+        start: Handle to start from.
+        all_relatives: Person-handle -> set-of-direct-relative-handles graph.
+        max_hops: Maximum number of hops to traverse.
+
+    Returns:
+        Set of handles reachable within max_hops (excludes start itself).
+    """
+    visited = {start}
+    frontier = {start}
+    for _ in range(max_hops):
+        next_frontier: set = set()
+        for h in frontier:
+            for neighbor in all_relatives.get(h, set()):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    next_frontier.add(neighbor)
+        if not next_frontier:
+            break
+        frontier = next_frontier
+    visited.discard(start)
+    return visited
 
 
 def _family_bonus(
-    p1: dict, p2: dict, conn: sqlite3.Connection
+    rel_1: Dict[str, set], rel_2: Dict[str, set], conn: sqlite3.Connection
 ) -> Tuple[float, List[str]]:
     """
-    Extra score when both persons share at least one relative.
+    Extra score when both persons share relatives in the SAME role.
+
+    Only same-role overlap counts: both listing the identical handle as
+    PARENT, as SPOUSE, or as CHILD is evidence of a duplicated record (e.g.
+    a family entered twice, each copy holding one of the two child records
+    that should be merged). A connector shared only via mismatched roles
+    (e.g. one person's child is the other's parent, as with a grandparent
+    and grandchild) is ordinary kinship and must not contribute.
 
     Args:
-        p1: Person JSON dict.
-        p2: Person JSON dict.
-        conn: SQLite connection.
+        rel_1: Role-separated direct-relative sets of person 1.
+        rel_2: Role-separated direct-relative sets of person 2.
+        conn: SQLite connection (used only to resolve a sample name for the
+            reason text).
 
     Returns:
         Tuple of (bonus, reasons).
     """
-    shared = _family_neighbor_handles(p1, conn) & _family_neighbor_handles(p2, conn)
+    shared = (
+        (rel_1["parents"] & rel_2["parents"])
+        | (rel_1["spouses"] & rel_2["spouses"])
+        | (rel_1["children"] & rel_2["children"])
+    )
     if not shared:
         return 0.0, []
     bonus = min(len(shared) * 3.0, 6.0)
@@ -330,6 +435,16 @@ def find_duplicate_persons(
     """
     persons = _load_persons(conn)
     birth_years = _bulk_birth_years(persons, conn)
+    relations = _bulk_family_relations(persons, conn)
+    all_relatives = {h: _all_relatives(rel) for h, rel in relations.items()}
+    hop_relatives_cache: Dict[str, set] = {}
+
+    def hop_relatives(h: str) -> set:
+        if h not in hop_relatives_cache:
+            hop_relatives_cache[h] = _relatives_within_hops(
+                h, all_relatives, RELATION_EXCLUSION_HOPS
+            )
+        return hop_relatives_cache[h]
 
     # Group by normalised (surname, given) for O(n) pair enumeration
     groups: Dict[tuple, list] = defaultdict(list)
@@ -344,18 +459,27 @@ def find_duplicate_persons(
         for i in range(len(handles)):
             for j in range(i + 1, len(handles)):
                 h1, h2 = handles[i], handles[j]
+
+                # Already related within RELATION_EXCLUSION_HOPS (parent,
+                # child, spouse, sibling, or grandparent/uncle-nephew etc.) -
+                # a same-named relative is not a duplicate candidate.
+                if h2 in hop_relatives(h1):
+                    continue
+
                 p1, p2 = persons[h1], persons[h2]
                 score, reasons = similarity_score(
                     p1, p2, birth_years.get(h1), birth_years.get(h2)
                 )
-                if score < min_score:
-                    continue
+                if score <= 0:
+                    continue  # hard mismatch - no family bonus can rescue this
                 if score < 8:
-                    bonus, fam_reasons = _family_bonus(p1, p2, conn)
+                    bonus, fam_reasons = _family_bonus(
+                        relations[h1], relations[h2], conn
+                    )
                     score += bonus
                     reasons += fam_reasons
-                    if score < min_score:
-                        continue
+                if score < min_score:
+                    continue
 
                 if _richness(p1) >= _richness(p2):
                     winner, loser = p1, p2
