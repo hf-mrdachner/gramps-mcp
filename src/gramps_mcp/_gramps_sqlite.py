@@ -675,9 +675,12 @@ class GrampsSqliteDB(GrampsXmlDB):
                     for parent_key in ("father_handle", "mother_handle"):
                         if parent_key not in obj:
                             continue
-                        parent_handle = gramps_json.get(parent_key)
-                        if parent_handle:
-                            _update_person_family_list(self._conn, handle, parent_handle)
+                        new_parent_handle = gramps_json.get(parent_key)
+                        old_parent_handle = (existing_raw or {}).get(parent_key)
+                        if old_parent_handle and old_parent_handle != new_parent_handle:
+                            _remove_person_family_list(self._conn, handle, old_parent_handle)
+                        if new_parent_handle:
+                            _update_person_family_list(self._conn, handle, new_parent_handle)
                 # Fix D: update child_ref_list of families when person written with parent_family_list
                 if obj_type == "person" and "parent_family_list" in obj:
                     parent_family_handles = gramps_json.get("parent_family_list", [])
@@ -862,6 +865,41 @@ def _update_person_family_list(conn: Any, family_handle: str, person_handle: str
     fl = person_data.get("family_list", [])
     if family_handle not in fl:
         fl.append(family_handle)
+        person_data["family_list"] = fl
+        person_data["change"] = int(time.time())
+        conn.execute(
+            "UPDATE person SET json_data = ?, change = ? WHERE handle = ?",  # noqa: S608
+            (json.dumps(person_data, ensure_ascii=False), person_data["change"], person_handle),
+        )
+
+
+def _remove_person_family_list(conn: Any, family_handle: str, person_handle: str) -> None:
+    """
+    Remove family_handle from family_list of a person no longer a parent in it.
+
+    Called within the same SQLite transaction as the family write, when a
+    father_handle/mother_handle is reassigned to a different person (or
+    cleared) — without this, the old parent keeps a stale family_list entry
+    even though the family no longer points back to them.
+
+    Args:
+        conn: Open sqlite3.Connection within an active transaction.
+        family_handle: The family handle to remove from the person's family_list.
+        person_handle: Handle of the person who is no longer father/mother.
+    """
+    row = conn.execute(
+        "SELECT json_data FROM person WHERE handle = ?",  # noqa: S608
+        (person_handle,),
+    ).fetchone()
+    if not row:
+        return
+    try:
+        person_data = json.loads(row[0])
+    except Exception:
+        return
+    fl = person_data.get("family_list", [])
+    if family_handle in fl:
+        fl.remove(family_handle)
         person_data["family_list"] = fl
         person_data["change"] = int(time.time())
         conn.execute(
@@ -1117,6 +1155,11 @@ def _merge_into(base: Dict, patch: Dict, obj_type: str) -> None:
         elif key == "child_handles" and isinstance(val, list):
             # FamilySaveParams convenience: flat handle list → child_ref_list
             base["child_ref_list"] = [_denorm_child_ref({"ref": h}) for h in val]
+        elif obj_type == "family" and key in ("father_handle", "mother_handle"):
+            # Unlike most fields, an explicit None here means "clear this
+            # parent" — the generic `elif val is not None` fallback below
+            # would otherwise silently ignore it and leave the old value.
+            base[gramps_key] = val
         elif obj_type == "place" and key == "name" and isinstance(val, dict):
             base["name"] = _denorm_place_name(val)
             new_val = val.get("value", "")

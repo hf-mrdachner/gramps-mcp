@@ -355,6 +355,70 @@ class TestFamilyListAutoUpdate:
         person_data = json.loads(row["json_data"])
         assert family["handle"] not in person_data.get("family_list", [])
 
+    def test_family_list_removed_from_old_father_on_reassignment(self, fresh_db):
+        db, conn = fresh_db
+        old_father = db.put("person", {"given_name": "John", "surname": "Smith"})
+        new_father = db.put("person", {"given_name": "Charlie", "surname": "Jones"})
+        family = db.put("family", {"father_handle": old_father["handle"]})
+        family_handle = family["handle"]
+
+        db.put("family", {"handle": family_handle, "father_handle": new_father["handle"]})
+
+        old_row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (old_father["handle"],)
+        ).fetchone()
+        old_data = json.loads(old_row["json_data"])
+        assert family_handle not in old_data.get("family_list", [])
+
+        new_row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (new_father["handle"],)
+        ).fetchone()
+        new_data = json.loads(new_row["json_data"])
+        assert family_handle in new_data.get("family_list", [])
+
+    def test_family_list_removed_from_old_mother_on_reassignment(self, fresh_db):
+        db, conn = fresh_db
+        old_mother = db.put("person", {"given_name": "Jane", "surname": "Doe"})
+        new_mother = db.put("person", {"given_name": "Alice", "surname": "Roe"})
+        family = db.put("family", {"mother_handle": old_mother["handle"]})
+        family_handle = family["handle"]
+
+        db.put("family", {"handle": family_handle, "mother_handle": new_mother["handle"]})
+
+        old_row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (old_mother["handle"],)
+        ).fetchone()
+        old_data = json.loads(old_row["json_data"])
+        assert family_handle not in old_data.get("family_list", [])
+
+    def test_family_list_removed_from_old_father_when_cleared(self, fresh_db):
+        db, conn = fresh_db
+        old_father = db.put("person", {"given_name": "John", "surname": "Smith"})
+        family = db.put("family", {"father_handle": old_father["handle"]})
+        family_handle = family["handle"]
+
+        db.put("family", {"handle": family_handle, "father_handle": None})
+
+        old_row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (old_father["handle"],)
+        ).fetchone()
+        old_data = json.loads(old_row["json_data"])
+        assert family_handle not in old_data.get("family_list", [])
+
+    def test_family_list_unchanged_when_father_rewritten_same_value(self, fresh_db):
+        db, conn = fresh_db
+        father = db.put("person", {"given_name": "John", "surname": "Smith"})
+        family = db.put("family", {"father_handle": father["handle"]})
+        family_handle = family["handle"]
+
+        db.put("family", {"handle": family_handle, "father_handle": father["handle"]})
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (father["handle"],)
+        ).fetchone()
+        data = json.loads(row["json_data"])
+        assert data.get("family_list", []).count(family_handle) == 1
+
 
 # ===========================================================================
 # Fix D — child_ref_list of families when person written with parent_family_list
