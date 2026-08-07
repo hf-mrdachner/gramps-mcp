@@ -37,3 +37,142 @@ jobs:
             --ignore=tests/test_auth_integration.py \
             --ignore=tests/test_search_details.py \
             -v --tb=short
+
+  web-api-integration-tests:
+    name: Web API Integration Tests (informational)
+    runs-on: ubuntu-latest
+    # Only gate PRs targeting main — dev only needs the fast unit/SQLite tier.
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    continue-on-error: true
+    services:
+      redis:
+        image: docker.io/valkey/valkey:8-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Generate shared secret key
+        # docker-entrypoint.sh would auto-generate GRAMPSWEB_SECRET_KEY, but only
+        # exports it into its own shell — neither `docker exec` nor the separate
+        # celery container would inherit it. Generate one ourselves and pass it
+        # explicitly to every container that needs it.
+        run: echo "GRAMPSWEB_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')" >> "$GITHUB_ENV"
+
+      - name: Start Gramps Web API container
+        run: |
+          # -v gramps_db shares the tree database with the celery worker below —
+          # each `docker run` gets its own isolated filesystem by default, so
+          # without a shared volume the worker looks for the tree in its own
+          # empty /root/.gramps/grampsdb and every async task fails with
+          # "Database path ... not found".
+          # GRAMPSWEB_RATELIMIT_ENABLED=False: the login endpoint is limited to
+          # 1/second server-side; our test suite authenticates per-test and
+          # blows through that in well under a second, so real requests started
+          # failing with HTTP 429. Fine to disable for this throwaway instance.
+          docker run -d --name grampsweb \
+            --network host \
+            -v gramps_db:/root/.gramps/grampsdb \
+            -e GRAMPSWEB_SECRET_KEY="$GRAMPSWEB_SECRET_KEY" \
+            -e GRAMPSWEB_TREE="CI Test Tree" \
+            -e GRAMPSWEB_RATELIMIT_ENABLED=False \
+            -e GRAMPSWEB_CELERY_CONFIG__broker_url=redis://localhost:6379/0 \
+            -e GRAMPSWEB_CELERY_CONFIG__result_backend=redis://localhost:6379/0 \
+            ghcr.io/gramps-project/grampsweb:latest
+
+      - name: Start Celery worker
+        # Analysis tools (ancestors/descendants/tree-info) run as async Celery
+        # tasks server-side; without a worker consuming the Redis queue they
+        # hang until the client-side 60s timeout.
+        run: |
+          docker run -d --name grampsweb-celery \
+            --network host \
+            -v gramps_db:/root/.gramps/grampsdb \
+            -e GRAMPSWEB_SECRET_KEY="$GRAMPSWEB_SECRET_KEY" \
+            -e GRAMPSWEB_TREE="CI Test Tree" \
+            -e GRAMPSWEB_RATELIMIT_ENABLED=False \
+            -e GRAMPSWEB_CELERY_CONFIG__broker_url=redis://localhost:6379/0 \
+            -e GRAMPSWEB_CELERY_CONFIG__result_backend=redis://localhost:6379/0 \
+            ghcr.io/gramps-project/grampsweb:latest \
+            celery -A gramps_webapi.celery worker --loglevel=INFO --concurrency=2
+
+      - name: Wait for Gramps Web API to become reachable
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/api/token/ || true)
+            if [ -n "$code" ] && [ "$code" != "000" ]; then
+              echo "Gramps Web API responded with HTTP $code after $i attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Gramps Web API never became reachable"
+          docker logs grampsweb --tail 200
+          exit 1
+
+      - name: Create CI test user
+        # Single-tree deployment (no GRAMPSWEB_TREE_MULTI), so --tree is not
+        # required — see gramps_webapi/__main__.py user_add: `--tree` is only
+        # mandatory when multi-tree support is enabled.
+        # --role 5 (ROLE_ADMIN, see gramps_webapi/auth/const.py): throwaway
+        # single-purpose CI account, no reason to under-provision it — role 4
+        # (Owner) got "Permission denied" on tree-info.
+        run: |
+          docker exec grampsweb python3 -m gramps_webapi user add \
+            ci_user ci_password --role 5
+
+      - name: Start gramps-mcp server
+        # tests/test_server.py talks to the gramps-mcp HTTP server itself
+        # (localhost:8000), not directly to the Gramps Web API — start it here.
+        env:
+          GRAMPS_API_URL: http://localhost:5000
+          GRAMPS_USERNAME: ci_user
+          GRAMPS_PASSWORD: ci_password
+          GRAMPS_TREE_ID: default
+        run: |
+          nohup uv run python -m src.gramps_mcp.server > gramps-mcp-server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "gramps-mcp server is up after $i attempt(s)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "gramps-mcp server never became healthy"
+          cat gramps-mcp-server.log
+          exit 1
+
+      - name: Run Web API integration tests
+        env:
+          GRAMPS_API_URL: http://localhost:5000
+          GRAMPS_USERNAME: ci_user
+          GRAMPS_PASSWORD: ci_password
+          GRAMPS_TREE_ID: default
+        run: |
+          uv run pytest \
+            tests/test_server.py \
+            tests/test_data_management.py \
+            tests/test_search_basic.py \
+            tests/test_client.py \
+            tests/test_analysis.py \
+            tests/test_complete_workflow.py \
+            tests/test_auth_integration.py \
+            tests/test_search_details.py \
+            -v --tb=short
+
+      - name: Show Gramps Web API logs
+        if: always()
+        run: docker logs grampsweb --tail 500
+
+      - name: Show Celery worker logs
+        if: always()
+        run: docker logs grampsweb-celery --tail 200
