@@ -70,10 +70,21 @@ jobs:
 
       - name: Start Gramps Web API container
         run: |
+          # -v gramps_db shares the tree database with the celery worker below —
+          # each `docker run` gets its own isolated filesystem by default, so
+          # without a shared volume the worker looks for the tree in its own
+          # empty /root/.gramps/grampsdb and every async task fails with
+          # "Database path ... not found".
+          # GRAMPSWEB_RATELIMIT_ENABLED=False: the login endpoint is limited to
+          # 1/second server-side; our test suite authenticates per-test and
+          # blows through that in well under a second, so real requests started
+          # failing with HTTP 429. Fine to disable for this throwaway instance.
           docker run -d --name grampsweb \
             --network host \
+            -v gramps_db:/root/.gramps/grampsdb \
             -e GRAMPSWEB_SECRET_KEY="$GRAMPSWEB_SECRET_KEY" \
             -e GRAMPSWEB_TREE="CI Test Tree" \
+            -e GRAMPSWEB_RATELIMIT_ENABLED=False \
             -e GRAMPSWEB_CELERY_CONFIG__broker_url=redis://localhost:6379/0 \
             -e GRAMPSWEB_CELERY_CONFIG__result_backend=redis://localhost:6379/0 \
             ghcr.io/gramps-project/grampsweb:latest
@@ -85,8 +96,10 @@ jobs:
         run: |
           docker run -d --name grampsweb-celery \
             --network host \
+            -v gramps_db:/root/.gramps/grampsdb \
             -e GRAMPSWEB_SECRET_KEY="$GRAMPSWEB_SECRET_KEY" \
             -e GRAMPSWEB_TREE="CI Test Tree" \
+            -e GRAMPSWEB_RATELIMIT_ENABLED=False \
             -e GRAMPSWEB_CELERY_CONFIG__broker_url=redis://localhost:6379/0 \
             -e GRAMPSWEB_CELERY_CONFIG__result_backend=redis://localhost:6379/0 \
             ghcr.io/gramps-project/grampsweb:latest \
@@ -110,9 +123,12 @@ jobs:
         # Single-tree deployment (no GRAMPSWEB_TREE_MULTI), so --tree is not
         # required — see gramps_webapi/__main__.py user_add: `--tree` is only
         # mandatory when multi-tree support is enabled.
+        # --role 5 (ROLE_ADMIN, see gramps_webapi/auth/const.py): throwaway
+        # single-purpose CI account, no reason to under-provision it — role 4
+        # (Owner) got "Permission denied" on tree-info.
         run: |
           docker exec grampsweb python3 -m gramps_webapi user add \
-            ci_user ci_password --role 4
+            ci_user ci_password --role 5
 
       - name: Start gramps-mcp server
         # tests/test_server.py talks to the gramps-mcp HTTP server itself
