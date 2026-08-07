@@ -63,8 +63,14 @@ jobs:
 
       - name: Start Gramps Web API container
         run: |
+          # docker-entrypoint.sh auto-generates GRAMPSWEB_SECRET_KEY, but only
+          # exports it into its own shell — a later `docker exec` (used below
+          # to create the CI user) doesn't inherit it and fails with
+          # "SECRET_KEY must be specified". Pass a fixed one as a container-level
+          # env var instead, so both the server process and `docker exec` see it.
           docker run -d --name grampsweb \
             --network host \
+            -e GRAMPSWEB_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
             -e GRAMPSWEB_TREE="CI Test Tree" \
             -e GRAMPSWEB_CELERY_CONFIG__broker_url=redis://localhost:6379/0 \
             -e GRAMPSWEB_CELERY_CONFIG__result_backend=redis://localhost:6379/0 \
