@@ -154,11 +154,21 @@ class TestEventParsing:
         assert "between" in date["string"]
         assert "1976" in date["string"]
 
+    def test_daterange_dateval_includes_stop_date(self, db):
+        # <daterange start="1976-01-01" stop="1976-12-31" .../>
+        date = db.get("event", "h_ev_birth_child")["date"]
+        assert date["dateval"] == [1, 1, 1976, False, 31, 12, 1976, False]
+
     def test_datespan(self, db):
         date = db.get("event", "h_ev_residence")["date"]
         assert date["modifier"] == 5   # from...to
         assert "from" in date["string"]
         assert "1980" in date["string"]
+
+    def test_datespan_dateval_includes_stop_date(self, db):
+        # <datespan start="1980-01-01" stop="2000-12-31"/>
+        date = db.get("event", "h_ev_residence")["date"]
+        assert date["dateval"] == [1, 1, 1980, False, 31, 12, 2000, False]
 
     def test_datestr(self, db):
         date = db.get("event", "h_ev_textdate")["date"]

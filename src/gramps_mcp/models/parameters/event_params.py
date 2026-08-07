@@ -58,7 +58,9 @@ class EventSaveParams(BaseModel):
             "Event date object with dateval array [day, month, year, False], "
             "quality (0=regular, 1=estimated, 2=calculated), and modifier "
             "(0=regular, 1=before, 2=after, 3=about, 4=range, 5=span, "
-            "6=textonly, 7=from, 8=to)"
+            "6=textonly, 7=from, 8=to). For modifier 4 (range) or 5 (span), "
+            "dateval MUST have 8 elements: [day1, month1, year1, False, "
+            "day2, month2, year2, False] — the second date is the range/span end"
         ),
     )
     description: Optional[str] = Field(None, description="Event description")

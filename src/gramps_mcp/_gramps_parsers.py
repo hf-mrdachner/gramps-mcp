@@ -86,8 +86,9 @@ def _parse_date(el) -> Dict:
     if t == "daterange":
         start, stop = el.get("start", ""), el.get("stop", "")
         y, m, d = _split_date(start)
+        y2, m2, d2 = _split_date(stop)
         return {
-            "dateval": [d, m, y, False],
+            "dateval": [d, m, y, False, d2, m2, y2, False],
             "modifier": 4,  # between
             "quality": _QUALITY.get(el.get("quality", ""), 0),
             "string": f"between {start} and {stop}" if start else "",
@@ -96,8 +97,9 @@ def _parse_date(el) -> Dict:
     if t == "datespan":
         start, stop = el.get("start", ""), el.get("stop", "")
         y, m, d = _split_date(start)
+        y2, m2, d2 = _split_date(stop)
         return {
-            "dateval": [d, m, y, False],
+            "dateval": [d, m, y, False, d2, m2, y2, False],
             "modifier": 5,  # from...to
             "quality": _QUALITY.get(el.get("quality", ""), 0),
             "string": f"from {start} to {stop}" if start else "",

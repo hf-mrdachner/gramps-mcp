@@ -111,6 +111,7 @@ def _make_event_ref(event_handle: str, role: str) -> dict:
         "ref": event_handle,
         "role": _denorm_type(role, "EventRoleType"),
         "private": False,
+        "citation_list": [],
         "note_list": [],
         "attribute_list": [],
     }

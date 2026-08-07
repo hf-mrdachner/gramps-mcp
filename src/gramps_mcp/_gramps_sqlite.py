@@ -258,8 +258,9 @@ def _denorm_date(d: Any) -> Dict:
         Gramps JSON date dict with ``_class`` and ``text`` key.
     """
     _empty_dateval = [0, 0, 0, False]
+    _RANGE_OR_SPAN = (4, 5)
 
-    def _safe_dateval(raw: Any) -> list:
+    def _safe_dateval(raw: Any, modifier: int) -> list:
         # Gramps _display_gregorian accesses dateval[2] and dateval[3].
         # Pad any short list to the minimum 4 elements [day, month, year, slash].
         dv = list(raw) if isinstance(raw, (list, tuple)) and raw else list(_empty_dateval)
@@ -267,17 +268,23 @@ def _denorm_date(d: Any) -> Dict:
             dv.append(0)
         if len(dv) == 3:
             dv.append(False)
+        # MOD_RANGE/MOD_SPAN require 8 elements (start + stop date); Gramps'
+        # own get_stop_date()/get_iso_date() crash on a short tuple, so pad
+        # a missing stop half with an "unknown" date rather than truncating.
+        if modifier in _RANGE_OR_SPAN and len(dv) < 8:
+            dv = (dv + list(_empty_dateval))[:8]
         return dv
 
     if not isinstance(d, dict):
         return {"_class": "Date", "calendar": 0, "modifier": 0, "quality": 0,
                 "dateval": list(_empty_dateval), "text": "", "sortval": 0, "newyear": 0, "format": None}
+    modifier = d.get("modifier", 0)
     return {
         "_class": "Date",
         "calendar": d.get("calendar", 0),
-        "modifier": d.get("modifier", 0),
+        "modifier": modifier,
         "quality": d.get("quality", 0),
-        "dateval": _safe_dateval(d.get("dateval")),
+        "dateval": _safe_dateval(d.get("dateval"), modifier),
         "text": d.get("string", ""),
         "sortval": d.get("sortval", 0),
         "newyear": d.get("newyear", 0),
