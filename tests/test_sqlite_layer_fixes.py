@@ -484,6 +484,103 @@ class TestChildRefListAutoUpdate:
 # Fix E — _write_object / _write_person raise on missing handle
 # ===========================================================================
 
+# ===========================================================================
+# Fix F — daterange/datespan dateval padded to 8 elements on write
+# ===========================================================================
+
+class TestDateRangeSpanDatevalPadding:
+    def test_range_dateval_padded_to_eight_elements(self, fresh_db):
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev_range", "E0001", _MARRIAGE_TYPE)
+
+        db.put("event", {
+            "handle": "h_ev_range",
+            "date": {"dateval": [1, 1, 1976, False], "modifier": 4, "quality": 0, "string": ""},
+        })
+
+        row = conn.execute(
+            "SELECT json_data FROM event WHERE handle = ?", ("h_ev_range",)
+        ).fetchone()
+        dateval = json.loads(row["json_data"])["date"]["dateval"]
+        assert dateval == [1, 1, 1976, False, 0, 0, 0, False]
+
+    def test_span_dateval_padded_to_eight_elements(self, fresh_db):
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev_span", "E0001", _MARRIAGE_TYPE)
+
+        db.put("event", {
+            "handle": "h_ev_span",
+            "date": {"dateval": [1, 1, 1980, False], "modifier": 5, "quality": 0, "string": ""},
+        })
+
+        row = conn.execute(
+            "SELECT json_data FROM event WHERE handle = ?", ("h_ev_span",)
+        ).fetchone()
+        dateval = json.loads(row["json_data"])["date"]["dateval"]
+        assert dateval == [1, 1, 1980, False, 0, 0, 0, False]
+
+    def test_already_eight_elements_passed_through_unchanged(self, fresh_db):
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev_range_full", "E0001", _MARRIAGE_TYPE)
+
+        db.put("event", {
+            "handle": "h_ev_range_full",
+            "date": {"dateval": [1, 1, 1976, False, 31, 12, 1976, False],
+                     "modifier": 4, "quality": 0, "string": ""},
+        })
+
+        row = conn.execute(
+            "SELECT json_data FROM event WHERE handle = ?", ("h_ev_range_full",)
+        ).fetchone()
+        dateval = json.loads(row["json_data"])["date"]["dateval"]
+        assert dateval == [1, 1, 1976, False, 31, 12, 1976, False]
+
+    def test_regular_date_stays_four_elements(self, fresh_db):
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev_regular", "E0001", _MARRIAGE_TYPE)
+
+        db.put("event", {
+            "handle": "h_ev_regular",
+            "date": {"dateval": [1, 1, 1990, False], "modifier": 0, "quality": 0, "string": ""},
+        })
+
+        row = conn.execute(
+            "SELECT json_data FROM event WHERE handle = ?", ("h_ev_regular",)
+        ).fetchone()
+        dateval = json.loads(row["json_data"])["date"]["dateval"]
+        assert len(dateval) == 4
+
+
+# ===========================================================================
+# Fix G — event_ref citation_list present on refs created via link-edit tools
+# ===========================================================================
+
+class TestEventRefCitationList:
+    def test_make_event_ref_includes_citation_list(self):
+        from gramps_mcp.tools._sqlite_helpers import _make_event_ref
+
+        ref = _make_event_ref("h_ev_birth", "Primary")
+        assert ref["citation_list"] == []
+
+    @pytest.mark.asyncio
+    async def test_add_event_to_person_stores_citation_list_on_ref(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_event_to_person_tool
+
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev_birth", "E0001", _BIRTH_TYPE)
+        person = db.put("person", {"given_name": "James", "surname": "Smith"})
+
+        await add_event_to_person_tool(
+            person_handle=person["handle"], event_handle="h_ev_birth", db=db
+        )
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (person["handle"],)
+        ).fetchone()
+        event_ref = json.loads(row["json_data"])["event_ref_list"][0]
+        assert event_ref["citation_list"] == []
+
+
 class TestWriteObjectRowcount:
     def test_write_object_raises_when_family_handle_not_found(self, fresh_db):
         from gramps_mcp.tools._sqlite_helpers import _write_object
