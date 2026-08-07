@@ -76,8 +76,9 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
     # Relations section
     result += "\nRELATIONS:\n"
 
-    # Parents section
-    result += "Parents:\n"
+    # Parents section — labeled per family so a person wrongly linked as a
+    # child in more than one family (a data-integrity bug, or a legitimate
+    # step-/adoptive-family case) doesn't render as one merged, unlabeled block.
     parent_family_list = person_data.get("parent_family_list", [])
 
     for family_handle in parent_family_list:
@@ -88,6 +89,8 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
                 handle=family_handle,
                 params={"extend": "all"},
             )
+            family_gramps_id = family_data.get("gramps_id", "")
+            result += f"Parents: (family {family_gramps_id})\n"
             extended = family_data.get("extended", {})
 
             # Father
@@ -118,7 +121,7 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
                 child for child in children if child.get("gramps_id", "") != gramps_id
             ]
             if siblings:
-                result += "Siblings:\n"
+                result += "Siblings (same family):\n"
                 for sibling in siblings:
                     sibling = await redact_if_living(sibling, client, tree_id)
                     sibling_name = _extract_person_name(sibling)
