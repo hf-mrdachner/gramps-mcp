@@ -61,20 +61,36 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
+      - name: Generate shared secret key
+        # docker-entrypoint.sh would auto-generate GRAMPSWEB_SECRET_KEY, but only
+        # exports it into its own shell — neither `docker exec` nor the separate
+        # celery container would inherit it. Generate one ourselves and pass it
+        # explicitly to every container that needs it.
+        run: echo "GRAMPSWEB_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')" >> "$GITHUB_ENV"
+
       - name: Start Gramps Web API container
         run: |
-          # docker-entrypoint.sh auto-generates GRAMPSWEB_SECRET_KEY, but only
-          # exports it into its own shell — a later `docker exec` (used below
-          # to create the CI user) doesn't inherit it and fails with
-          # "SECRET_KEY must be specified". Pass a fixed one as a container-level
-          # env var instead, so both the server process and `docker exec` see it.
           docker run -d --name grampsweb \
             --network host \
-            -e GRAMPSWEB_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
+            -e GRAMPSWEB_SECRET_KEY="$GRAMPSWEB_SECRET_KEY" \
             -e GRAMPSWEB_TREE="CI Test Tree" \
             -e GRAMPSWEB_CELERY_CONFIG__broker_url=redis://localhost:6379/0 \
             -e GRAMPSWEB_CELERY_CONFIG__result_backend=redis://localhost:6379/0 \
             ghcr.io/gramps-project/grampsweb:latest
+
+      - name: Start Celery worker
+        # Analysis tools (ancestors/descendants/tree-info) run as async Celery
+        # tasks server-side; without a worker consuming the Redis queue they
+        # hang until the client-side 60s timeout.
+        run: |
+          docker run -d --name grampsweb-celery \
+            --network host \
+            -e GRAMPSWEB_SECRET_KEY="$GRAMPSWEB_SECRET_KEY" \
+            -e GRAMPSWEB_TREE="CI Test Tree" \
+            -e GRAMPSWEB_CELERY_CONFIG__broker_url=redis://localhost:6379/0 \
+            -e GRAMPSWEB_CELERY_CONFIG__result_backend=redis://localhost:6379/0 \
+            ghcr.io/gramps-project/grampsweb:latest \
+            celery -A gramps_webapi.celery worker --loglevel=INFO --concurrency=2
 
       - name: Wait for Gramps Web API to become reachable
         run: |
@@ -98,6 +114,27 @@ jobs:
           docker exec grampsweb python3 -m gramps_webapi user add \
             ci_user ci_password --role 4
 
+      - name: Start gramps-mcp server
+        # tests/test_server.py talks to the gramps-mcp HTTP server itself
+        # (localhost:8000), not directly to the Gramps Web API — start it here.
+        env:
+          GRAMPS_API_URL: http://localhost:5000
+          GRAMPS_USERNAME: ci_user
+          GRAMPS_PASSWORD: ci_password
+          GRAMPS_TREE_ID: default
+        run: |
+          nohup uv run python -m src.gramps_mcp.server > gramps-mcp-server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "gramps-mcp server is up after $i attempt(s)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "gramps-mcp server never became healthy"
+          cat gramps-mcp-server.log
+          exit 1
+
       - name: Run Web API integration tests
         env:
           GRAMPS_API_URL: http://localhost:5000
@@ -119,3 +156,7 @@ jobs:
       - name: Show Gramps Web API logs
         if: always()
         run: docker logs grampsweb --tail 500
+
+      - name: Show Celery worker logs
+        if: always()
+        run: docker logs grampsweb-celery --tail 200
