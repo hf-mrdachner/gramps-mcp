@@ -337,6 +337,38 @@ class TestApiWrite:
             assert "Smith" in str(text)
 
     @pytest.mark.asyncio
+    async def test_create_citation_persists_page(self, sqlite_client):
+        # Regression: "page" was in _dispatch's pagination-param strip set,
+        # so Citation.page (a real data field) was silently dropped on write.
+        result = await sqlite_client.make_api_call(ApiCalls.POST_CITATIONS, params={
+            "source_handle": "h_so_civil",
+            "page": "Sterberegister, Urkunde Nr. 90",
+            "confidence": 2,
+            "note_list": [], "media_list": [], "attribute_list": [],
+        })
+        assert result["page"] == "Sterberegister, Urkunde Nr. 90"
+        fetched = await sqlite_client.make_api_call(
+            ApiCalls.GET_CITATION, handle=result["handle"]
+        )
+        assert fetched["page"] == "Sterberegister, Urkunde Nr. 90"
+
+    @pytest.mark.asyncio
+    async def test_update_citation_page(self, sqlite_client):
+        created = await sqlite_client.make_api_call(ApiCalls.POST_CITATIONS, params={
+            "source_handle": "h_so_civil",
+            "page": "old page",
+            "confidence": 2,
+            "note_list": [], "media_list": [], "attribute_list": [],
+        })
+        handle = created["handle"]
+        updated = await sqlite_client.make_api_call(
+            ApiCalls.PUT_CITATION, params={"page": "new page"}, handle=handle
+        )
+        assert updated["page"] == "new page"
+        fetched = await sqlite_client.make_api_call(ApiCalls.GET_CITATION, handle=handle)
+        assert fetched["page"] == "new page"
+
+    @pytest.mark.asyncio
     async def test_new_handle_is_unique(self, sqlite_client):
         h1 = sqlite_client._db.new_handle()
         h2 = sqlite_client._db.new_handle()
