@@ -502,7 +502,7 @@ class TestDateRangeSpanDatevalPadding:
             "SELECT json_data FROM event WHERE handle = ?", ("h_ev_range",)
         ).fetchone()
         dateval = json.loads(row["json_data"])["date"]["dateval"]
-        assert len(dateval) == 8
+        assert dateval == [1, 1, 1976, False, 0, 0, 0, False]
 
     def test_span_dateval_padded_to_eight_elements(self, fresh_db):
         db, conn = fresh_db
@@ -517,7 +517,23 @@ class TestDateRangeSpanDatevalPadding:
             "SELECT json_data FROM event WHERE handle = ?", ("h_ev_span",)
         ).fetchone()
         dateval = json.loads(row["json_data"])["date"]["dateval"]
-        assert len(dateval) == 8
+        assert dateval == [1, 1, 1980, False, 0, 0, 0, False]
+
+    def test_already_eight_elements_passed_through_unchanged(self, fresh_db):
+        db, conn = fresh_db
+        _insert_event(conn, "h_ev_range_full", "E0001", _MARRIAGE_TYPE)
+
+        db.put("event", {
+            "handle": "h_ev_range_full",
+            "date": {"dateval": [1, 1, 1976, False, 31, 12, 1976, False],
+                     "modifier": 4, "quality": 0, "string": ""},
+        })
+
+        row = conn.execute(
+            "SELECT json_data FROM event WHERE handle = ?", ("h_ev_range_full",)
+        ).fetchone()
+        dateval = json.loads(row["json_data"])["date"]["dateval"]
+        assert dateval == [1, 1, 1976, False, 31, 12, 1976, False]
 
     def test_regular_date_stays_four_elements(self, fresh_db):
         db, conn = fresh_db
