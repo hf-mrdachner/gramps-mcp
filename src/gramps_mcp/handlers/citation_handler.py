@@ -28,6 +28,8 @@ from .date_handler import format_date
 
 logger = logging.getLogger(__name__)
 
+CONFIDENCE_LABELS = {0: "Very Low", 1: "Low", 2: "Normal", 3: "High", 4: "Very High"}
+
 
 async def format_citation(client, tree_id: str, handle: str) -> str:
     """
@@ -56,6 +58,7 @@ async def format_citation(client, tree_id: str, handle: str) -> str:
 
         gramps_id = citation_data.get("gramps_id", "")
         page = citation_data.get("page", "").strip()
+        confidence = citation_data.get("confidence", 2)
         source_handle = citation_data.get("source_handle", "")
         date = citation_data.get("date", {})
         media_list = citation_data.get("media_list", [])
@@ -74,24 +77,20 @@ async def format_citation(client, tree_id: str, handle: str) -> str:
             except Exception:
                 pass
 
-        # First line: source title, page - gramps_id - [handle]
-        first_line_parts = []
+        # First line: source title - gramps_id - [handle]
         if source_title:
-            first_line_parts.append(source_title)
-        if page:
-            first_line_parts.append(page)
-
-        if first_line_parts:
-            first_line = f"{', '.join(first_line_parts)} - {gramps_id} - [{handle}]"
+            first_line = f"{source_title} - {gramps_id} - [{handle}]"
         else:
             first_line = f" - {gramps_id} - [{handle}]"
         result = first_line
 
-        # Date line
-        if date:
-            formatted_date = format_date(date)
-            if formatted_date != "date unknown":
-                result += f"\n{formatted_date}"
+        # Page/Date/Confidence: always shown as explicit labeled lines so a
+        # silently-dropped write (e.g. issue #12) is visible in the response
+        # instead of looking identical to a successful one.
+        result += f"\nPage: {page if page else '(none)'}"
+        result += f"\nDate: {format_date(date)}"
+        confidence_label = CONFIDENCE_LABELS.get(confidence, f"Unknown({confidence})")
+        result += f"\nConfidence: {confidence_label}"
 
         # Attached media: gramps_id(s)
         if media_list:
