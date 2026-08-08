@@ -382,6 +382,17 @@ class GrampsSqliteClient:
         hit (see issue #21) — then returns only the first `pagesize` as the
         page.
 
+        Note: this always visits every object type via ``self._db.all()``,
+        which re-queries SQLite on every call (LazyDict does no caching, by
+        design, so writes from Gramps Desktop are visible immediately). On
+        large trees this makes `_search` noticeably slower than the old
+        early-exit version — a known trade-off for correct cross-type
+        totals; pushing the text match into SQL would remove it but is a
+        larger change than this fix.
+
+        Args:
+            params: Query parameters; only ``query`` and ``pagesize`` are used.
+
         Returns:
             Tuple of (page, total_match_count).
         """
