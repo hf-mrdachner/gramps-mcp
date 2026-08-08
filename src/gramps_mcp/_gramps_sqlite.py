@@ -297,6 +297,26 @@ def _denorm_date(d: Any) -> Dict:
 # ---------------------------------------------------------------------------
 
 
+def _ci_contains(text: Optional[str], query: str) -> bool:
+    """
+    Unicode-aware case-insensitive substring test, registered as the SQL
+    UDF ``ci_contains(text, query)`` (see :func:`_load_sqlite`).
+
+    SQLite's built-in ``LIKE`` only case-folds ASCII, which would silently
+    drop matches for names with accented characters. This mirrors Python's
+    ``str.lower()`` instead, matching the semantics ``_text_match`` already
+    relies on.
+
+    Args:
+        text:  Raw column text (``None`` never matches).
+        query: Already-lowercased search term.
+
+    Returns:
+        True if *query* is a substring of *text* (case-insensitive).
+    """
+    return bool(text) and query in text.lower()
+
+
 class LazyDict:
     """
     Dict-like proxy that queries SQLite on every access.
@@ -399,6 +419,54 @@ class LazyDict:
     def __setitem__(self, handle: str, value: Dict) -> None:
         """No-op — data is persisted to SQLite by put(), not via dict assignment."""
 
+    def search(
+        self,
+        query_lower: str,
+        extra_where: str = "",
+        extra_params: Optional[List[Any]] = None,
+    ) -> List[Dict]:
+        """
+        Return normalised objects that are candidates for *query_lower*.
+
+        A fast SQL-level prefilter (see issue #38) run in SQLite avoids
+        paying the JSON-parse + normalise cost for every row of a large
+        table: rows are only fetched if the raw ``json_data`` text contains
+        *query_lower* (via the ``ci_contains`` UDF), or if *extra_where*
+        matches. This is a strict superset of any per-type text match a
+        caller might apply afterwards, since every value a caller could
+        compare against is itself literal text somewhere in ``json_data``
+        — except values resolved from a numeric code during normalisation
+        (e.g. standard EventType names), which callers must cover via
+        *extra_where* instead.
+
+        Args:
+            query_lower:  Already-lowercased search term.
+            extra_where:  Optional additional SQL boolean expression,
+                OR-ed with the ``ci_contains`` check.
+            extra_params: Parameters for the placeholders in *extra_where*.
+
+        Returns:
+            List of normalised candidate objects (may include false
+            positives the caller still needs to filter with an exact
+            per-type text match).
+        """
+        sql = f"SELECT json_data FROM {self._table} WHERE ci_contains(json_data, ?)"  # noqa: S608
+        params: List[Any] = [query_lower]
+        if extra_where:
+            sql += f" OR ({extra_where})"
+            params += list(extra_params or [])
+        try:
+            rows = self._conn.execute(sql, params).fetchall()
+        except sqlite3.OperationalError:
+            return []
+        result = []
+        for row in rows:
+            try:
+                result.append(self._normalise(json.loads(row["json_data"])))
+            except Exception:
+                pass
+        return result
+
 
 # ---------------------------------------------------------------------------
 # Database loader
@@ -490,6 +558,7 @@ class GrampsSqliteDB(GrampsXmlDB):
         self._conn = conn
         self._db_path = db_path
         self._read_only = read_only
+        conn.create_function("ci_contains", 2, _ci_contains)
         self._normalise_map = {
             "person":     _normalize_person,
             "family":     _normalize_family,
@@ -511,6 +580,42 @@ class GrampsSqliteDB(GrampsXmlDB):
         self.notes        = LazyDict(conn, "note",       _normalize_generic)
         self.media        = LazyDict(conn, "media",      _normalize_generic)
         self.repositories = LazyDict(conn, "repository", _normalize_generic)
+
+    def search_candidates(self, obj_type: str, query_lower: str) -> List[Dict]:
+        """
+        Fast candidate set for full-text search (issue #38).
+
+        Delegates to the matching :class:`LazyDict`'s SQL-level prefilter
+        instead of ``self.all(obj_type)``, so large tables avoid parsing
+        every row in Python just to discard most of them.
+
+        For ``event``, standard (non-custom) type codes resolve to display
+        strings like "Birth"/"Death" only during normalisation and are
+        never literal text in ``json_data`` — those are matched separately
+        via ``type.value`` so a search for "birth" still finds them.
+
+        Args:
+            obj_type:    One of ``person``, ``family``, ``event``, etc.
+            query_lower: Already-lowercased search term.
+
+        Returns:
+            List of normalised candidate objects. Callers must still apply
+            the exact per-type text match — this may over-match.
+        """
+        store = self._store(obj_type)
+        if obj_type == "event":
+            type_ids = [
+                v for v, name in EVENT_TYPE.items() if query_lower in name.lower()
+            ]
+            if type_ids:
+                placeholders = ",".join("?" * len(type_ids))
+                extra_where = (
+                    f"json_extract(json_data, '$.type.value') IN ({placeholders})"
+                )
+                return store.search(
+                    query_lower, extra_where=extra_where, extra_params=type_ids
+                )
+        return store.search(query_lower)
 
     def get_by_id(self, obj_type: str, gramps_id: str) -> Optional[Dict]:
         """
