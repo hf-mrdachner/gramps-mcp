@@ -90,6 +90,25 @@ class RemoveChildFromFamilyParams(BaseModel):
     )
 
 
+class AddChildToFamilyParams(BaseModel):
+    """Parameters for add_child_to_family tool."""
+
+    family_handle: Optional[str] = Field(None, description="Handle of the family")
+    family_gramps_id: Optional[str] = Field(
+        None,
+        description="Gramps ID of the family (e.g. 'F0001'). Alternative to family_handle.",
+    )
+    child_handle: Optional[str] = Field(
+        None, description="Handle of the child person to add"
+    )
+    child_gramps_id: Optional[str] = Field(
+        None,
+        description="Gramps ID of the child (e.g. 'I0003'). Alternative to child_handle.",
+    )
+    frel: str = Field("Birth", description="Relationship to father (default: 'Birth')")
+    mrel: str = Field("Birth", description="Relationship to mother (default: 'Birth')")
+
+
 class RemoveEventFromPersonParams(BaseModel):
     """Parameters for remove_event_from_person tool."""
 

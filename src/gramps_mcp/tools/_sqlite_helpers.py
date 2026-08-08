@@ -8,7 +8,12 @@ import json
 import time
 from typing import Any, Dict, Optional
 
-from gramps_mcp._gramps_sqlite import GrampsSqliteDB, _compute_birth_death_indices, _denorm_type
+from gramps_mcp._gramps_sqlite import (
+    GrampsSqliteDB,
+    _compute_birth_death_indices,
+    _denorm_child_ref,
+    _denorm_type,
+)
 from gramps_mcp.client import GrampsAPIError
 
 _VALID_TABLES: frozenset[str] = frozenset({
@@ -115,6 +120,24 @@ def _make_event_ref(event_handle: str, role: str) -> dict:
         "note_list": [],
         "attribute_list": [],
     }
+
+
+def _make_child_ref(child_handle: str, frel: str = "Birth", mrel: str = "Birth") -> dict:
+    """
+    Build a Gramps ChildRef dict for insertion into a child_ref_list.
+
+    Reuses _denorm_child_ref so relationship-type defaults stay identical to
+    the create_family/child_handles write path.
+
+    Args:
+        child_handle: Handle of the child person to reference.
+        frel: Relationship to father (e.g. 'Birth', 'Adopted').
+        mrel: Relationship to mother (e.g. 'Birth', 'Adopted').
+
+    Returns:
+        Dict conforming to the Gramps ChildRef JSON schema.
+    """
+    return _denorm_child_ref({"ref": child_handle, "frel": frel, "mrel": mrel})
 
 
 def _require_sqlite_db(db: Any, tool_name: str) -> GrampsSqliteDB:

@@ -14,6 +14,7 @@ from mcp.types import TextContent
 
 from gramps_mcp.client import GrampsAPIError
 from gramps_mcp.tools._sqlite_helpers import (
+    _make_child_ref,
     _make_event_ref,
     _read_object,
     _require_sqlite_db,
@@ -384,6 +385,90 @@ async def remove_child_from_family_tool(
             "family_handle": family_handle,
             "child_handle": child_handle,
             "remaining_children": len(new_child_refs),
+        },
+        ensure_ascii=False,
+    ))]
+
+
+# ---------------------------------------------------------------------------
+# Tool 3b: add_child_to_family
+# ---------------------------------------------------------------------------
+
+
+async def add_child_to_family_tool(
+    family_handle: str,
+    child_handle: str,
+    frel: str = "Birth",
+    mrel: str = "Birth",
+    db: Any = None,
+) -> List[TextContent]:
+    """
+    Append a child to a family's child_ref_list without replacing it.
+
+    Adds the child to the family's child_ref_list, then adds family_handle to
+    the child person's parent_family_list. Both writes happen in a single
+    SQLite transaction — mirrors remove_child_from_family_tool. Unlike
+    create_family(child_gramps_ids=[...]), which replaces child_ref_list
+    wholesale, this only appends, so existing children are never at risk of
+    being silently dropped. SQLite backend only.
+
+    If the child is already in the family, this is a no-op — it does not
+    update frel/mrel on an already-linked child (matches add_event_to_person/
+    add_event_to_family's equivalent no-op behavior for role on a repeat call).
+
+    Args:
+        family_handle: Handle of the family.
+        child_handle: Handle of the child person to add.
+        frel: Relationship to father (default: 'Birth').
+        mrel: Relationship to mother (default: 'Birth').
+        db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
+
+    Returns:
+        List[TextContent] with JSON result, family_handle, child_handle,
+        child_count.
+
+    Raises:
+        GrampsAPIError: If backend is not SQLite or handles not found.
+    """
+    db = _require_sqlite_db(db, "add_child_to_family")
+    conn = db._conn
+
+    family_data = _read_object(conn, "family", family_handle, "Family")
+    child_ref_list = family_data.get("child_ref_list", [])
+
+    existing_handles = [
+        cr.get("ref") for cr in child_ref_list if isinstance(cr, dict)
+    ]
+    if child_handle in existing_handles:
+        return [TextContent(type="text", text=json.dumps(
+            {
+                "result": "no_change",
+                "message": f"Child '{child_handle}' is already in this family.",
+            },
+            ensure_ascii=False,
+        ))]
+
+    # Confirms the child exists before writing either side.
+    child_data = _read_object(conn, "person", child_handle, "Child person")
+
+    child_ref_list.append(_make_child_ref(child_handle, frel, mrel))
+    family_data["child_ref_list"] = child_ref_list
+
+    pfl = child_data.get("parent_family_list", [])
+    if family_handle not in pfl:
+        pfl.append(family_handle)
+        child_data["parent_family_list"] = pfl
+
+    with conn:
+        _write_object(conn, "family", family_handle, family_data)
+        _write_person(conn, child_handle, child_data)
+
+    return [TextContent(type="text", text=json.dumps(
+        {
+            "result": "ok",
+            "family_handle": family_handle,
+            "child_handle": child_handle,
+            "child_count": len(child_ref_list),
         },
         ensure_ascii=False,
     ))]
