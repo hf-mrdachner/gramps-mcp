@@ -603,10 +603,15 @@ def _name_identity(name: dict) -> tuple:
     surnames = tuple(
         sn.get("surname", "") for sn in name.get("surname_list", [])
     )
+    name_type = name.get("type", {})
+    # _denorm_type maps every non-standard type string to the same "Custom"
+    # sentinel (value=0), with the actual label only in `string` — comparing
+    # value alone would treat two distinct custom types as duplicates.
     return (
         name.get("first_name", ""),
         surnames,
-        name.get("type", {}).get("value"),
+        name_type.get("value"),
+        name_type.get("string"),
     )
 
 
