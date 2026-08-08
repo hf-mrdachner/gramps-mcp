@@ -28,6 +28,7 @@ from mcp.types import TextContent
 
 from ..client import GrampsAPIError
 from ..config import get_settings
+from ..handlers.citation_handler import CONFIDENCE_LABELS as _CONFIDENCE_LABELS
 from ..handlers.date_handler import format_date
 from ..handlers.family_detail_handler import format_family_detail
 from ..handlers.person_detail_handler import format_person_detail
@@ -319,9 +320,6 @@ async def get_note_tool(client, arguments: Dict) -> List[TextContent]:
 
     except Exception as e:
         return _format_error_response(e, "note details retrieval")
-
-
-_CONFIDENCE_LABELS = {0: "Very Low", 1: "Low", 2: "Normal", 3: "High", 4: "Very High"}
 
 
 @with_client
