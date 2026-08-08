@@ -201,9 +201,11 @@ class GrampsSqliteClient:
             is_put = api_call.name.startswith("PUT_")
             # Strip MCP query params that must not be persisted as object fields.
             # Note: "name" is intentionally excluded — it is a real data field
-            # on Place objects and must be written through.
-            _meta = {"extend", "pagesize", "page", "gramps_id", "gql",
-                     "query", "search"}
+            # on Place objects and must be written through. Same for "page" on
+            # Citation objects (source page/location text, not pagination).
+            _meta = {"extend", "pagesize", "gramps_id", "gql", "query", "search"}
+            if obj_type != "citation":
+                _meta = _meta | {"page"}
             body = {k: v for k, v in params.items() if k not in _meta}
             if is_put and handle:
                 body = {**body, "handle": handle}
