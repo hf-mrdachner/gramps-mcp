@@ -321,6 +321,133 @@ async def get_note_tool(client, arguments: Dict) -> List[TextContent]:
         return _format_error_response(e, "note details retrieval")
 
 
+_CONFIDENCE_LABELS = {0: "Very Low", 1: "Low", 2: "Normal", 3: "High", 4: "Very High"}
+
+
+@with_client
+async def get_citation_tool(client, arguments: Dict) -> List[TextContent]:
+    """
+    Get citation details: page, date, confidence, source, and attributes
+    (including _APID, used by Ancestry-style record resolution). Also finds
+    which persons/families/events reference this citation.
+    Scans all persons/families/events — fact-based, no guessing.
+    """
+    try:
+        from ..gramps_id import resolve_handles
+
+        arguments = await resolve_handles(arguments, {"handle": "citation"}, client)
+        handle = arguments.get("handle")
+        settings = get_settings()
+        tree_id = settings.gramps_tree_id
+        if not handle:
+            raise ValueError("handle or gramps_id is required")
+        citation = await client.make_api_call(
+            ApiCalls.GET_CITATION, tree_id=tree_id, handle=handle
+        )
+        if not citation:
+            return [TextContent(type="text", text=f"Citation {handle} not found")]
+        gramps_id = citation.get("gramps_id", handle)
+
+        # Source title
+        source_title = ""
+        source_handle = citation.get("source_handle", "")
+        if source_handle:
+            try:
+                source = await client.make_api_call(
+                    ApiCalls.GET_SOURCE, tree_id=tree_id, handle=source_handle
+                )
+                source_title = source.get("title", "") if source else ""
+            except Exception:
+                pass
+
+        page = citation.get("page", "")
+        date = format_date(citation.get("date", {}))
+        confidence = citation.get("confidence", 2)
+        confidence_label = _CONFIDENCE_LABELS.get(confidence, f"Unknown({confidence})")
+
+        header = f"## Citation — {gramps_id} [{handle}]"
+        lines = [header, ""]
+        if source_title:
+            lines.append(f"* Quelle: {source_title} ({source_handle})")
+        if page:
+            lines.append(f"* Seite: {page}")
+        if date != "date unknown":
+            lines.append(f"* Datum: {date}")
+        lines.append(f"* Konfidenz: {confidence_label}")
+
+        attribute_list = citation.get("attribute_list", [])
+        for attr in attribute_list:
+            if not isinstance(attr, dict):
+                continue
+            attr_type = attr.get("type", {})
+            attr_type_str = (
+                attr_type.get("string", "")
+                if isinstance(attr_type, dict)
+                else str(attr_type)
+            )
+            attr_value = attr.get("value", "")
+            lines.append(f"* Attribut {attr_type_str}: {attr_value}")
+
+        note_list = citation.get("note_list", [])
+        if note_list:
+            note_ids = []
+            for note_handle in note_list:
+                try:
+                    note = await client.make_api_call(
+                        ApiCalls.GET_NOTE, tree_id=tree_id, handle=note_handle
+                    )
+                    if note:
+                        note_ids.append(note.get("gramps_id", ""))
+                except Exception:
+                    continue
+            if note_ids:
+                lines.append(f"* Notizen: {', '.join(note_ids)}")
+
+        # Find persons/families/events referencing this citation — scan all,
+        # GQL cannot search inside arrays
+        all_persons = await client.make_api_call(
+            ApiCalls.GET_PEOPLE, tree_id=tree_id, params={"pagesize": 99999}
+        )
+        all_families = await client.make_api_call(
+            ApiCalls.GET_FAMILIES, tree_id=tree_id, params={"pagesize": 99999}
+        )
+        all_events = await client.make_api_call(
+            ApiCalls.GET_EVENTS, tree_id=tree_id, params={"pagesize": 99999}
+        )
+
+        found = []
+        for person in all_persons:
+            if handle in person.get("citation_list", []):
+                pn = person.get("primary_name", {})
+                given = pn.get("first_name", "")
+                sl = pn.get("surname_list", [])
+                surname = sl[0].get("surname", "") if sl else ""
+                name = f"{given} {surname}".strip() or "?"
+                pid = person.get("gramps_id", "")
+                found.append(f"* Person: {name} ({pid})")
+        for family in all_families:
+            if handle in family.get("citation_list", []):
+                fid = family.get("gramps_id", "")
+                found.append(f"* Familie: {fid}")
+        for event in all_events:
+            if handle in event.get("citation_list", []):
+                etype = event.get("type", "?")
+                eid = event.get("gramps_id", "")
+                found.append(f"* Event: {etype} ({eid})")
+
+        lines.append("")
+        lines.append("**Verwendet von:**")
+        if found:
+            lines.extend(found)
+        else:
+            lines.append("* Keine Verknüpfungen gefunden")
+
+        return [TextContent(type="text", text="\n".join(lines))]
+
+    except Exception as e:
+        return _format_error_response(e, "citation details retrieval")
+
+
 @with_client
 async def merge_places_tool(client, arguments: Dict) -> List[TextContent]:
     """

@@ -230,6 +230,87 @@ class TestGetNoteTool:
 
 
 # ---------------------------------------------------------------------------
+# get_citation_tool
+# ---------------------------------------------------------------------------
+
+class TestGetCitationTool:
+    @pytest.mark.asyncio
+    async def test_returns_page_confidence_and_source(self, write_client):
+        from gramps_mcp.tools.search_details import get_citation_tool
+        # C0001 = h_ci_birth: page "Certificate No. 12345", confidence 2,
+        # source_handle h_so_civil ("Civil Records Office")
+        result = await get_citation_tool.__wrapped__(write_client, {"gramps_id": "C0001"})
+        text = _result_text(result)
+        assert "C0001" in text
+        assert "Certificate No. 12345" in text
+        assert "Normal" in text  # confidence 2
+        assert "Civil Records Office" in text
+
+    @pytest.mark.asyncio
+    async def test_not_found(self, write_client):
+        from gramps_mcp.tools.search_details import get_citation_tool
+        result = await get_citation_tool.__wrapped__(write_client, {"gramps_id": "C9999"})
+        assert "not found" in _result_text(result)
+
+    @pytest.mark.asyncio
+    async def test_missing_gramps_id(self, write_client):
+        from gramps_mcp.tools.search_details import get_citation_tool
+        result = await get_citation_tool.__wrapped__(write_client, {})
+        assert "Error" in _result_text(result)
+
+    @pytest.mark.asyncio
+    async def test_backlink_person_found(self, write_client):
+        from gramps_mcp.tools.search_details import get_citation_tool
+        # h_ci_birth (C0001) is in h_pe_john's (I0001) citation_list in conftest_sqlite
+        result = await get_citation_tool.__wrapped__(write_client, {"gramps_id": "C0001"})
+        text = _result_text(result)
+        assert "I0001" in text
+
+    @pytest.mark.asyncio
+    async def test_shows_apid_attribute(self, write_client):
+        from gramps_mcp.tools.search_details import get_citation_tool
+
+        conn = write_client._db._conn
+        data = {
+            "_class": "Citation", "handle": "h_ci_ancestry", "gramps_id": "C0099",
+            "page": "", "confidence": 2, "source_handle": "h_so_civil",
+            "date": {"_class": "Date", "calendar": 0, "modifier": 0, "quality": 0,
+                     "dateval": [0, 0, 0, False], "text": "", "sortval": 0,
+                     "newyear": 0, "format": None},
+            "note_list": [], "media_list": [],
+            "attribute_list": [{
+                "_class": "Attribute",
+                "type": {"_class": "AttributeType", "value": 0, "string": "_APID"},
+                "value": "1,6482::12345", "private": False,
+                "citation_list": [], "note_list": [],
+            }],
+            "tag_list": [], "change": 0, "private": False,
+        }
+        conn.execute(
+            "INSERT INTO citation (handle,gramps_id,json_data,page,confidence,source_handle,change,private) "
+            "VALUES (?,?,?,?,?,?,0,0)",
+            ("h_ci_ancestry", "C0099", json.dumps(data), "", 2, "h_so_civil"),
+        )
+        conn.commit()
+
+        result = await get_citation_tool.__wrapped__(write_client, {"gramps_id": "C0099"})
+        text = _result_text(result)
+        assert "_APID" in text
+        assert "1,6482::12345" in text
+
+    @pytest.mark.asyncio
+    async def test_no_backlinks_found(self, write_client):
+        from gramps_mcp.tools.search_details import get_citation_tool
+        _add_citation(
+            write_client._db._conn, "h_ci_orphan", "C0098", "h_so_civil", "Orphan page"
+        )
+
+        result = await get_citation_tool.__wrapped__(write_client, {"gramps_id": "C0098"})
+        text = _result_text(result)
+        assert "Keine Verkn" in text  # "Keine Verknüpfungen gefunden"
+
+
+# ---------------------------------------------------------------------------
 # merge_places_tool (dry_run + write)
 # ---------------------------------------------------------------------------
 

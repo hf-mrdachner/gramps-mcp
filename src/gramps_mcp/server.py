@@ -126,6 +126,7 @@ from .tools.search_basic import find_type_tool
 from .tools.search_details import (
     find_duplicate_citations_tool,
     find_duplicate_events_tool,
+    get_citation_tool,
     get_event_tool,
     get_family_tool,
     get_note_tool,
@@ -208,6 +209,10 @@ class GetPlaceParams(BaseModel):
 
 class GetNoteParams(BaseModel):
     gramps_id: str = Field(..., description="Gramps note ID (e.g. 'N0001')")
+
+
+class GetCitationParams(BaseModel):
+    gramps_id: str = Field(..., description="Gramps citation ID (e.g. 'C0001')")
 
 
 class MergePlacesParams(BaseModel):
@@ -480,6 +485,16 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         ),
         "schema": GetNoteParams,
         "handler": get_note_tool,
+    },
+    "get_citation": {
+        "description": (
+            "Get citation details: page, date, confidence, source title, and "
+            "attributes (including _APID, used by Ancestry-style record resolution). "
+            "Also finds which persons/families/events reference this citation. "
+            "Scans all persons/families/events — fact-based, no guessing."
+        ),
+        "schema": GetCitationParams,
+        "handler": get_citation_tool,
     },
     "merge_places": {
         "description": (
@@ -878,6 +893,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     ],
     "citation": [
         "create_citation",
+        "get_citation",
         "create_source",
         "create_repository",
         "add_citation_to_event",
