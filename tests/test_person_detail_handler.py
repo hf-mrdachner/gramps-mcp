@@ -208,3 +208,86 @@ class TestMultipleParentFamilyLabels:
         result = await format_person_detail(write_client, "default", child["handle"])
 
         assert f"Parents: (family {family['gramps_id']})" in result
+
+
+class TestFamilyIdsExposed:
+    @pytest.mark.asyncio
+    async def test_summary_line_shows_child_and_parent_family_ids(self, write_client):
+        db = write_client._db
+        grandfather = _new_person(db, "Aaron", "Smith")
+        person = _new_person(db, "Pat", "Doe")
+        spouse = _new_person(db, "Sam", "Roe")
+        child = _new_person(db, "Kim", "Doe")
+
+        parent_family = db.put("family", {
+            "father_handle": grandfather["handle"],
+            "child_handles": [person["handle"]],
+        })
+        own_family = db.put("family", {
+            "father_handle": person["handle"], "mother_handle": spouse["handle"],
+            "child_handles": [child["handle"]],
+        })
+
+        result = await format_person_detail(write_client, "default", person["handle"])
+
+        assert "Family IDs" in result
+        assert f"as child: {parent_family['gramps_id']}" in result
+        assert f"as parent: {own_family['gramps_id']}" in result
+
+    @pytest.mark.asyncio
+    async def test_spouse_family_block_labeled_with_family_id(self, write_client):
+        db = write_client._db
+        person = _new_person(db, "Pat", "Doe")
+        spouse = _new_person(db, "Sam", "Roe")
+        own_family = db.put("family", {
+            "father_handle": person["handle"], "mother_handle": spouse["handle"],
+        })
+
+        result = await format_person_detail(write_client, "default", person["handle"])
+
+        assert f"(family {own_family['gramps_id']})" in result
+
+    @pytest.mark.asyncio
+    async def test_summary_line_omitted_when_no_families(self, write_client):
+        db = write_client._db
+        person = _new_person(db, "Pat", "Doe")
+
+        result = await format_person_detail(write_client, "default", person["handle"])
+
+        assert "Family IDs" not in result
+
+    @pytest.mark.asyncio
+    async def test_summary_line_shows_only_child_when_no_own_family(self, write_client):
+        db = write_client._db
+        father = _new_person(db, "Charlie", "Jones")
+        person = _new_person(db, "Pat", "Doe")
+        parent_family = db.put("family", {
+            "father_handle": father["handle"], "child_handles": [person["handle"]],
+        })
+
+        result = await format_person_detail(write_client, "default", person["handle"])
+
+        assert f"as child: {parent_family['gramps_id']}" in result
+        assert "as parent:" not in result
+
+    @pytest.mark.asyncio
+    async def test_summary_line_lists_multiple_own_families(self, write_client):
+        db = write_client._db
+        person = _new_person(db, "Pat", "Doe")
+        spouse1 = _new_person(db, "Sam", "Roe")
+        spouse2 = _new_person(db, "Alex", "Fox")
+
+        family1 = db.put("family", {
+            "father_handle": person["handle"], "mother_handle": spouse1["handle"],
+        })
+        family2 = db.put("family", {
+            "father_handle": person["handle"], "mother_handle": spouse2["handle"],
+        })
+
+        result = await format_person_detail(write_client, "default", person["handle"])
+
+        as_parent_line = next(
+            line for line in result.splitlines() if line.startswith("Family IDs")
+        )
+        assert family1["gramps_id"] in as_parent_line
+        assert family2["gramps_id"] in as_parent_line

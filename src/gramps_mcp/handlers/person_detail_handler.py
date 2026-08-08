@@ -49,6 +49,15 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
 
     result += f"{name} ({gender_display}) - {gramps_id} - [{handle}]\n"
 
+    # Family IDs summary placeholder — filled in below, once the Parents/
+    # Spouse loops have already fetched each family (avoids a second
+    # GET_FAMILY round-trip per family purely to read gramps_id, since the
+    # summary line must appear before RELATIONS but the ids aren't known
+    # until those loops run).
+    family_ids_index = len(result)
+    parent_family_ids: list = []
+    own_family_ids: list = []
+
     # Birth and death from extended data
     extended = person_data.get("extended", {})
     events = extended.get("events", [])
@@ -90,6 +99,8 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
                 params={"extend": "all"},
             )
             family_gramps_id = family_data.get("gramps_id", "")
+            if family_gramps_id:
+                parent_family_ids.append(family_gramps_id)
             result += f"Parents: (family {family_gramps_id})\n"
             extended = family_data.get("extended", {})
 
@@ -135,7 +146,9 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
         except Exception:
             continue
 
-    # Spouses and children
+    # Spouses and children — labeled per family, same rationale as the
+    # Parents section above (see #15): makes the family_id directly visible
+    # and keeps multiple own-families distinguishable if they ever occur.
     family_list = person_data.get("family_list", [])
     for family_handle in family_list:
         try:
@@ -145,6 +158,10 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
                 handle=family_handle,
                 params={"extend": "all"},
             )
+            family_gramps_id = family_data.get("gramps_id", "")
+            if family_gramps_id:
+                own_family_ids.append(family_gramps_id)
+            result += f"Family: (family {family_gramps_id})\n"
             extended = family_data.get("extended", {})
 
             # Determine spouse (father or mother that's not this person)
@@ -299,6 +316,21 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
         )
         note_text = note_text_raw[:50] + ("..." if len(note_text_raw) > 50 else "")
         result += f"- {note_type}: {note_text} ({note_id})\n"
+
+    # Splice the Family IDs summary in at the position reserved earlier (right
+    # after the header, before Born/Died/RELATIONS) — a directly-queryable
+    # answer to "which family gramps_ids is this person part of" (as child
+    # and/or as parent), rather than only being discoverable by reading the
+    # curated sections above. Built from ids already collected while those
+    # sections were rendered, so no extra GET_FAMILY round-trips are needed.
+    if parent_family_ids or own_family_ids:
+        parts = []
+        if parent_family_ids:
+            parts.append(f"as child: {', '.join(parent_family_ids)}")
+        if own_family_ids:
+            parts.append(f"as parent: {', '.join(own_family_ids)}")
+        family_ids_line = f"Family IDs — {'; '.join(parts)}\n"
+        result = result[:family_ids_index] + family_ids_line + result[family_ids_index:]
 
     return result
 
