@@ -399,8 +399,16 @@ async def find_anything_tool(client, arguments: Dict) -> List[TextContent]:
     Full-text search across all entity types.
     """
     try:
+        # The advertised MCP schema (SimpleSearchParams) uses `max_results`,
+        # but SearchParams (the Web API's actual query params) has no such
+        # field — only `pagesize`. Translate explicitly so it isn't silently
+        # dropped by Pydantic's default "ignore extra kwargs" behavior.
+        raw_params = dict(arguments)
+        if "max_results" in raw_params:
+            raw_params["pagesize"] = raw_params.pop("max_results")
+
         # Validate parameters
-        params = SearchParams(**arguments)
+        params = SearchParams(**raw_params)
 
         # Get tree_id from settings
         settings = get_settings()

@@ -15,6 +15,15 @@ from src.gramps_mcp.tools.search_basic import (
     find_type_tool,
 )
 
+# `sqlite_client` (from conftest_sqlite.py) is built on the `gramps_mcp.*`
+# module tree, not `src.gramps_mcp.*` — those are two distinct module
+# instances (see conftest.py's sys.path manipulation), so ApiCalls enum
+# members from one are not `==` to the other. Import find_anything_tool
+# from the same tree as sqlite_client for tests that exercise it directly.
+from gramps_mcp.tools.search_basic import (
+    find_anything_tool as find_anything_tool_sqlite,
+)
+
 # Load environment variables
 load_dotenv()
 
@@ -302,4 +311,31 @@ class TestFindAnythingTool:
             # Count the number of "• **" entries which indicate individual results
             result_count = result[0].text.count("• **")
             assert result_count <= 3, f"Expected max 3 results, got {result_count}"
+
+
+class TestFindAnythingMaxResults:
+    """
+    Issue #21: find_anything_tool's advertised MCP schema (SimpleSearchParams)
+    has a `max_results` field, but the tool validated arguments against
+    SearchParams, which only has `pagesize` — so `max_results` was silently
+    dropped by Pydantic and the search was never capped/paginated.
+
+    "0001" matches three synthetic fixture records in three different object
+    types (family F0001, citation C0001, media O0001) via the SQLite
+    backend's default gramps_id text match (see conftest_sqlite.py), so this
+    also exercises the accompanying cross-type search cap fix.
+    """
+
+    @pytest.mark.asyncio
+    async def test_max_results_is_forwarded_as_pagesize(self, sqlite_client):
+        result = await find_anything_tool_sqlite.__wrapped__(
+            sqlite_client, {"query": "0001", "max_results": 1}
+        )
+        text = result[0].text
+        assert "Found 3 records matching '0001'" in text
+        assert "(showing 1)" in text
+        # Only the first matching type (family) should be rendered — the
+        # citation and media matches must not appear on this capped page.
+        assert "Civil Records Office" not in text
+        assert "image/jpeg" not in text
 

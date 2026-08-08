@@ -270,6 +270,40 @@ class TestApiRead:
 
 
 # ===========================================================================
+# API: full-text search (GET_SEARCH)  — issue #21
+# ===========================================================================
+
+
+class TestSearch:
+    """
+    "0001" matches three fixture records that fall through to the default
+    gramps_id text match in _search(): family F0001, citation C0001, and
+    media O0001 — one match in each of three different object types, which
+    are scanned in the order person/family/event/place/source/citation/
+    note/media/repository (see conftest_sqlite.py).
+    """
+
+    @pytest.mark.asyncio
+    async def test_search_total_count_reflects_all_types_not_just_page(
+        self, sqlite_client
+    ):
+        _, headers = await sqlite_client.make_api_call(
+            ApiCalls.GET_SEARCH,
+            params={"query": "0001", "pagesize": 1},
+            with_headers=True,
+        )
+        assert headers["x-total-count"] == "3"
+
+    @pytest.mark.asyncio
+    async def test_search_does_not_stop_at_first_matching_type(self, sqlite_client):
+        result = await sqlite_client.make_api_call(
+            ApiCalls.GET_SEARCH, params={"query": "0001", "pagesize": 3}
+        )
+        object_types = {r["object_type"] for r in result}
+        assert object_types == {"family", "citation", "media"}
+
+
+# ===========================================================================
 # API: make_api_call  (write)
 # ===========================================================================
 
