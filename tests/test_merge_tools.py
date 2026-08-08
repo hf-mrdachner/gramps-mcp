@@ -39,6 +39,7 @@ from gramps_mcp.merge.detect import (
 )
 from gramps_mcp.merge.operations import (
     _events_match,
+    _primary_surname,
     load_backups,
     merge_persons,
     split_person,
@@ -796,6 +797,63 @@ class TestSplitPerson:
         db, backup = merged_db
         split_person(db, "I_W", backup)
         split_person(db, "I_W", backup)  # second call must not crash
+
+
+# ---------------------------------------------------------------------------
+# 7b. merge_persons — alternate name preservation (regression #36)
+#
+# The name-preservation check used to compare first_name only, so a loser
+# with the same first name but a different surname (e.g. maiden vs. married
+# name) was dropped silently: no alternate name added, no mention in the
+# reported changes.
+# ---------------------------------------------------------------------------
+
+def _make_named_pair_db(
+    winner_first: str, winner_surname: str,
+    loser_first: str, loser_surname: str,
+) -> sqlite3.Connection:
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(_SCHEMA)
+    p_w = _person("h_w", "I_W", winner_first, winner_surname, 1, [])
+    p_l = _person("h_l", "I_L", loser_first, loser_surname, 1, [])
+    _insert_person(conn, winner_first, winner_surname, 1, p_w)
+    _insert_person(conn, loser_first, loser_surname, 1, p_l)
+    conn.commit()
+    return conn
+
+
+def _winner_json(conn: sqlite3.Connection) -> dict:
+    row = conn.execute(
+        "SELECT json_data FROM person WHERE handle='h_w'"
+    ).fetchone()
+    return json.loads(row["json_data"])
+
+
+class TestMergePersonsNamePreservation:
+    def test_same_first_name_different_surname_preserves_alternate_name(self):
+        # Regression #36: "Helen Gibson" (winner) absorbing "Helen Wilke"
+        # (loser) must not silently drop the "Wilke" surname.
+        conn = _make_named_pair_db("Helen", "Gibson", "Helen", "Wilke")
+        changes = merge_persons(conn, "h_w", "h_l", dry_run=False)
+        wp = _winner_json(conn)
+        alt_surnames = [_primary_surname(n) for n in wp.get("alternate_names", [])]
+        assert "Wilke" in alt_surnames
+        assert any("alternate name" in c.lower() for c in changes)
+
+    def test_different_first_name_same_surname_preserves_alternate_name(self):
+        conn = _make_named_pair_db("Barbara", "Wilke", "Barbara Kay", "Wilke")
+        merge_persons(conn, "h_w", "h_l", dry_run=False)
+        wp = _winner_json(conn)
+        alt_first_names = [n["first_name"] for n in wp.get("alternate_names", [])]
+        assert "Barbara Kay" in alt_first_names
+
+    def test_identical_full_name_no_alternate_added(self):
+        conn = _make_named_pair_db("Hans", "Mueller", "Hans", "Mueller")
+        changes = merge_persons(conn, "h_w", "h_l", dry_run=False)
+        wp = _winner_json(conn)
+        assert wp.get("alternate_names", []) == []
+        assert not any("alternate name" in c.lower() for c in changes)
 
 
 # ---------------------------------------------------------------------------
