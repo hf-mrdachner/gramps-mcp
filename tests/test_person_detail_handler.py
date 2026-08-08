@@ -92,6 +92,24 @@ class TestSingleParentChildrenSection:
         assert "Ellis" in result
 
     @pytest.mark.asyncio
+    async def test_spouse_and_children_both_shown_for_two_parent_family(self, write_client):
+        db = write_client._db
+        father = _new_person(db, "Charlie", "Jones")
+        mother = _new_person(db, "Maria", "Jones")
+        child = _new_person(db, "Dana", "Jones")
+        db.put("family", {
+            "father_handle": father["handle"], "mother_handle": mother["handle"],
+            "child_handles": [child["handle"]],
+        })
+
+        result = await format_person_detail(write_client, "default", father["handle"])
+
+        assert "Spouse:" in result
+        assert "Maria" in result
+        assert "Children:" in result
+        assert "Dana" in result
+
+    @pytest.mark.asyncio
     async def test_no_spouse_section_for_single_parent_family(self, write_client):
         db = write_client._db
         father = _new_person(db, "Charlie", "Jones")
