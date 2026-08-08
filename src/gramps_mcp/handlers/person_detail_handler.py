@@ -49,6 +49,35 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
 
     result += f"{name} ({gender_display}) - {gramps_id} - [{handle}]\n"
 
+    # Family IDs summary — a directly-queryable answer to "which family
+    # gramps_ids is this person part of" (as child and/or as parent), rather
+    # than only being discoverable by reading the curated sections below.
+    parent_family_ids = []
+    for fh in person_data.get("parent_family_list", []):
+        try:
+            fam = await client.make_api_call(ApiCalls.GET_FAMILY, tree_id=tree_id, handle=fh)
+            fid = fam.get("gramps_id", "") if fam else ""
+            if fid:
+                parent_family_ids.append(fid)
+        except Exception:
+            continue
+    own_family_ids = []
+    for fh in person_data.get("family_list", []):
+        try:
+            fam = await client.make_api_call(ApiCalls.GET_FAMILY, tree_id=tree_id, handle=fh)
+            fid = fam.get("gramps_id", "") if fam else ""
+            if fid:
+                own_family_ids.append(fid)
+        except Exception:
+            continue
+    if parent_family_ids or own_family_ids:
+        parts = []
+        if parent_family_ids:
+            parts.append(f"as child: {', '.join(parent_family_ids)}")
+        if own_family_ids:
+            parts.append(f"as parent: {', '.join(own_family_ids)}")
+        result += f"Family IDs — {'; '.join(parts)}\n"
+
     # Birth and death from extended data
     extended = person_data.get("extended", {})
     events = extended.get("events", [])
@@ -135,7 +164,9 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
         except Exception:
             continue
 
-    # Spouses and children
+    # Spouses and children — labeled per family, same rationale as the
+    # Parents section above (see #15): makes the family_id directly visible
+    # and keeps multiple own-families distinguishable if they ever occur.
     family_list = person_data.get("family_list", [])
     for family_handle in family_list:
         try:
@@ -145,6 +176,8 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
                 handle=family_handle,
                 params={"extend": "all"},
             )
+            family_gramps_id = family_data.get("gramps_id", "")
+            result += f"Family: (family {family_gramps_id})\n"
             extended = family_data.get("extended", {})
 
             # Determine spouse (father or mother that's not this person)
