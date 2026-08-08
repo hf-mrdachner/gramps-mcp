@@ -12,6 +12,7 @@ from gramps_mcp._gramps_sqlite import (
     GrampsSqliteDB,
     _compute_birth_death_indices,
     _denorm_child_ref,
+    _denorm_name,
     _denorm_type,
 )
 from gramps_mcp.client import GrampsAPIError
@@ -120,6 +121,22 @@ def _make_event_ref(event_handle: str, role: str) -> dict:
         "note_list": [],
         "attribute_list": [],
     }
+
+
+def _make_name(name: dict) -> dict:
+    """
+    Build a Gramps Name dict for insertion into alternate_names.
+
+    Reuses _denorm_name so field defaults stay identical to the
+    create_person primary_name write path.
+
+    Args:
+        name: Loosely-typed name dict (e.g. first_name, surname_list, type).
+
+    Returns:
+        Dict conforming to the Gramps Name JSON schema.
+    """
+    return _denorm_name(name)
 
 
 def _make_child_ref(child_handle: str, frel: str = "Birth", mrel: str = "Birth") -> dict:

@@ -1,6 +1,6 @@
 """Pydantic parameter models for the three link-edit MCP tools."""
 
-from typing import Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -280,6 +280,27 @@ class RemoveNoteFromPersonParams(BaseModel):
         None,
         description=(
             "Gramps ID of the note (e.g. 'N0001'). Alternative to note_handle."
+        ),
+    )
+
+
+class AddAlternateNameToPersonParams(BaseModel):
+    """Parameters for add_alternate_name_to_person tool."""
+
+    person_handle: Optional[str] = Field(None, description="Handle of the person")
+    person_gramps_id: Optional[str] = Field(
+        None,
+        description=(
+            "Gramps ID of the person (e.g. 'I0001'). Alternative to person_handle."
+        ),
+    )
+    name: Dict[str, Any] = Field(
+        ...,
+        description=(
+            "Name object to append to alternate_names, e.g. "
+            "{'first_name': 'Johanne', 'surname_list': [{'surname': 'Thamm'}], "
+            "'type': 'Also Known As'}. Same shape as create_person's primary_name. "
+            "Common type values: 'Birth Name', 'Married Name', 'Also Known As'."
         ),
     )
 

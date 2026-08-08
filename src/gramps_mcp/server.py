@@ -37,6 +37,7 @@ from pydantic import BaseModel, Field
 from .models.parameters.citation_params import CitationData
 from .models.parameters.delete_params import DeleteObjectParams
 from .models.parameters.link_edit_params import (
+    AddAlternateNameToPersonParams,
     AddChildToFamilyParams,
     AddCitationToEventParams,
     AddEventToFamilyParams,
@@ -101,6 +102,7 @@ from .tools import (
 )
 from .tools.delete import delete_object_tool
 from .tools.link_edit import (
+    add_alternate_name_to_person_tool,
     add_child_to_family_tool,
     add_event_to_family_tool,
     add_event_to_person_tool,
@@ -407,6 +409,15 @@ async def _handle_add_child_to_family(args: Dict) -> Any:
         child_handle=args["child_handle"],
         frel=args.get("frel", "Birth"),
         mrel=args.get("mrel", "Birth"),
+    )
+
+
+async def _handle_add_alternate_name_to_person(args: Dict) -> Any:
+    """Handler for add_alternate_name_to_person."""
+    return await add_alternate_name_to_person_tool(
+        person_handle=args.get("person_handle"),
+        person_gramps_id=args.get("person_gramps_id"),
+        name=args.get("name"),
     )
 
 
@@ -846,6 +857,18 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "schema": AddChildToFamilyParams,
         "handler": _handle_add_child_to_family,
     },
+    "add_alternate_name_to_person": {
+        "description": (
+            "Append a Name object to a person's alternate_names without touching "
+            "primary_name or any other field. Use this instead of smuggling a name "
+            "into create_person's untyped primary_name field, which risks a full "
+            "overwrite of unrelated data. Idempotent — an identical name "
+            "(same first_name/surname(s)/type) already present returns "
+            "result='no_change'. SQLite backend only."
+        ),
+        "schema": AddAlternateNameToPersonParams,
+        "handler": _handle_add_alternate_name_to_person,
+    },
     "move_attachment": {
         "description": (
             "Move a note or media reference from one object to another atomically. "
@@ -907,6 +930,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "add_dna_match",
         "get_dna_matches",
         "update_dna_match",
+        "add_alternate_name_to_person",
         "add_note_to_person",
         "remove_note_from_person",
         "get_note",
