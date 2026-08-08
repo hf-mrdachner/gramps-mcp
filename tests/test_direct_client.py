@@ -575,6 +575,34 @@ class TestApiSearch:
         assert "place" in types
 
 
+class TestApiSearchCrossTypeCap:
+    """
+    "0001" matches three fixture records that fall through to the default
+    gramps_id text match in _search(): family F0001, citation C0001, and
+    media O0001 — one match in each of three different object types, scanned
+    in the order person/family/event/place/source/citation/note/media/
+    repository (see conftest.py). Mirrors the SQLite backend's issue #21
+    regression tests in test_sqlite_client.py.
+    """
+
+    @pytest.mark.asyncio
+    async def test_search_does_not_stop_at_first_matching_type(self, client):
+        result = await client.make_api_call(
+            ApiCalls.GET_SEARCH, params={"query": "0001", "pagesize": 3}
+        )
+        object_types = {r["object_type"] for r in result}
+        assert object_types == {"family", "citation", "media"}
+
+    @pytest.mark.asyncio
+    async def test_search_total_count_reflects_all_types_not_just_page(self, client):
+        _, headers = await client.make_api_call(
+            ApiCalls.GET_SEARCH,
+            params={"query": "0001", "pagesize": 1},
+            with_headers=True,
+        )
+        assert headers["x-total-count"] == "3"
+
+
 class TestApiTreeInfo:
     @pytest.mark.asyncio
     async def test_tree_info(self, client):
