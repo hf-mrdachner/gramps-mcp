@@ -127,7 +127,7 @@ class TestFormatCitationEchoesFields:
 
         # C0001 date dateval [15, 1, 2024, False]
         result = await format_citation(write_client, "default", "h_ci_birth")
-        assert "Date:" in result
+        assert "Date: 15 January 2024" in result
 
     @pytest.mark.asyncio
     async def test_shows_date_unknown_when_no_date(self, write_client):
