@@ -391,19 +391,33 @@ class TestFamilyListAutoUpdate:
         old_data = json.loads(old_row["json_data"])
         assert family_handle not in old_data.get("family_list", [])
 
-    def test_family_list_removed_from_old_father_when_cleared(self, fresh_db):
+    def test_family_list_correct_when_father_and_mother_swapped(self, fresh_db):
+        # Regression: a naive remove-then-add per key (process father_handle,
+        # then mother_handle) would have mother's "remove B" run after
+        # father's "add B" and wipe out the family_list entry just added.
         db, conn = fresh_db
-        old_father = db.put("person", {"given_name": "John", "surname": "Smith"})
-        family = db.put("family", {"father_handle": old_father["handle"]})
+        a = db.put("person", {"given_name": "Aaron", "surname": "Smith"})
+        b = db.put("person", {"given_name": "Beth", "surname": "Smith"})
+        family = db.put("family", {
+            "father_handle": a["handle"], "mother_handle": b["handle"],
+        })
         family_handle = family["handle"]
 
-        db.put("family", {"handle": family_handle, "father_handle": None})
+        db.put("family", {
+            "handle": family_handle,
+            "father_handle": b["handle"], "mother_handle": a["handle"],
+        })
 
-        old_row = conn.execute(
-            "SELECT json_data FROM person WHERE handle = ?", (old_father["handle"],)
+        a_row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (a["handle"],)
         ).fetchone()
-        old_data = json.loads(old_row["json_data"])
-        assert family_handle not in old_data.get("family_list", [])
+        b_row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = ?", (b["handle"],)
+        ).fetchone()
+        a_data = json.loads(a_row["json_data"])
+        b_data = json.loads(b_row["json_data"])
+        assert family_handle in a_data.get("family_list", [])
+        assert family_handle in b_data.get("family_list", [])
 
     def test_family_list_unchanged_when_father_rewritten_same_value(self, fresh_db):
         db, conn = fresh_db

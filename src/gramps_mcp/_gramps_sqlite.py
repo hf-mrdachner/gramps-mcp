@@ -672,13 +672,22 @@ class GrampsSqliteDB(GrampsXmlDB):
                     _update_parent_family_list(self._conn, handle, child_handles)
                 # Fix C: update family_list of father/mother when family written with parent handles
                 if obj_type == "family":
+                    # Two passes (all removals, then all additions) rather than
+                    # remove-then-add per key: a father/mother swap in a single
+                    # write (father: A->B, mother: B->A) would otherwise have
+                    # mother's "remove B" run after father's "add B" and wipe
+                    # out the family_list entry that was just correctly added.
+                    changes = []
                     for parent_key in ("father_handle", "mother_handle"):
                         if parent_key not in obj:
                             continue
                         new_parent_handle = gramps_json.get(parent_key)
                         old_parent_handle = (existing_raw or {}).get(parent_key)
+                        changes.append((old_parent_handle, new_parent_handle))
+                    for old_parent_handle, new_parent_handle in changes:
                         if old_parent_handle and old_parent_handle != new_parent_handle:
                             _remove_person_family_list(self._conn, handle, old_parent_handle)
+                    for old_parent_handle, new_parent_handle in changes:
                         if new_parent_handle:
                             _update_person_family_list(self._conn, handle, new_parent_handle)
                 # Fix D: update child_ref_list of families when person written with parent_family_list
@@ -845,7 +854,8 @@ def _update_person_family_list(conn: Any, family_handle: str, person_handle: str
     Add family_handle to family_list of a spouse/parent person in the DB.
 
     Called within the same SQLite transaction as the family write. Only adds;
-    never removes (removal is handled by dedicated tools).
+    removal of a stale entry (e.g. on parent reassignment) is handled by the
+    sibling function _remove_person_family_list, in the same transaction.
 
     Args:
         conn: Open sqlite3.Connection within an active transaction.
@@ -1155,11 +1165,6 @@ def _merge_into(base: Dict, patch: Dict, obj_type: str) -> None:
         elif key == "child_handles" and isinstance(val, list):
             # FamilySaveParams convenience: flat handle list → child_ref_list
             base["child_ref_list"] = [_denorm_child_ref({"ref": h}) for h in val]
-        elif obj_type == "family" and key in ("father_handle", "mother_handle"):
-            # Unlike most fields, an explicit None here means "clear this
-            # parent" — the generic `elif val is not None` fallback below
-            # would otherwise silently ignore it and leave the old value.
-            base[gramps_key] = val
         elif obj_type == "place" and key == "name" and isinstance(val, dict):
             base["name"] = _denorm_place_name(val)
             new_val = val.get("value", "")
