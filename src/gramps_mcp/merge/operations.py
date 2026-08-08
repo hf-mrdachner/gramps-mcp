@@ -288,7 +288,12 @@ def merge_persons(
 
     loser_name = lp["primary_name"]
     winner_name = wp["primary_name"]
-    if loser_name["first_name"].strip().lower() != winner_name["first_name"].strip().lower():
+    loser_first = loser_name["first_name"].strip().lower()
+    winner_first = winner_name["first_name"].strip().lower()
+    loser_surname = _primary_surname(loser_name).strip().lower()
+    winner_surname = _primary_surname(winner_name).strip().lower()
+    names_differ = loser_first != winner_first or loser_surname != winner_surname
+    if names_differ:
         alt = deepcopy(loser_name)
         alt["type"] = {"_class": "NameType", "value": 2, "string": ""}
         wp.setdefault("alternate_names", []).append(alt)
