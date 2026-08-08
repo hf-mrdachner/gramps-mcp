@@ -176,21 +176,25 @@ class TestMultipleParentFamilyLabels:
             "father_handle": a["handle"], "mother_handle": b["handle"],
             "child_handles": [person["handle"], sibling1["handle"]],
         })
-        db.put("family", {
+        family2 = db.put("family", {
             "father_handle": c["handle"], "mother_handle": d["handle"],
             "child_handles": [person["handle"], sibling2["handle"]],
         })
 
         result = await format_person_detail(write_client, "default", person["handle"])
 
-        # The second family's parents (Carl/Dora) must never appear inside
-        # the first family's Siblings: block — that was the reported bug.
-        first_siblings_start = result.index("Sam")
-        second_family_start = result.index("Carl")
-        assert first_siblings_start < second_family_start
-        siblings_block_1 = result[first_siblings_start:second_family_start]
-        assert "Carl" not in siblings_block_1
-        assert "Dora" not in siblings_block_1
+        # The second family's parents (Carl/Dora) must land under their own
+        # labeled "Parents: (family ...)" block, not directly inside the
+        # first family's Siblings: list with no header in between — that was
+        # the reported bug. Using "Carl"'s own index as a window boundary
+        # would be tautological (the window can never contain its own end
+        # marker); assert the family2 header itself appears between the two
+        # names instead, which only holds true when the blocks are separated.
+        sam_idx = result.index("Sam")
+        carl_idx = result.index("Carl")
+        assert sam_idx < carl_idx
+        between = result[sam_idx:carl_idx]
+        assert f"Parents: (family {family2['gramps_id']})" in between
 
     @pytest.mark.asyncio
     async def test_single_parent_family_label_unaffected(self, write_client):
