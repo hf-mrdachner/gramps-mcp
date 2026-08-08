@@ -491,8 +491,12 @@ class TestAddChildToFamily:
         ).fetchone()
         family_data = json.loads(row["json_data"])
         cref = family_data["child_ref_list"][0]
-        assert cref["frel"]["string"] == "Birth" or cref["frel"]["value"] == 1
-        assert cref["mrel"]["string"] == "Birth" or cref["mrel"]["value"] == 1
+        # "Birth" is a mapped ChildRefType, not a custom one, so _denorm_type
+        # stores it as value=1 with an empty string (string is only populated
+        # for custom/unmapped values) — assert the actual encoding, not a
+        # string that never gets set.
+        assert cref["frel"]["value"] == 1
+        assert cref["mrel"]["value"] == 1
 
 
 # ===========================================================================

@@ -412,6 +412,10 @@ async def add_child_to_family_tool(
     wholesale, this only appends, so existing children are never at risk of
     being silently dropped. SQLite backend only.
 
+    If the child is already in the family, this is a no-op — it does not
+    update frel/mrel on an already-linked child (matches add_event_to_person/
+    add_event_to_family's equivalent no-op behavior for role on a repeat call).
+
     Args:
         family_handle: Handle of the family.
         child_handle: Handle of the child person to add.
