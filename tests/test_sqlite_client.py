@@ -270,6 +270,17 @@ class TestApiRead:
         assert len(result) == 3
         assert headers["x-total-count"] == "3"
 
+    @pytest.mark.asyncio
+    async def test_with_headers_total_count_reflects_all_matches_not_just_page(
+        self, sqlite_client
+    ):
+        """issue #39: x-total-count must be the true match count, not len(page)."""
+        result, headers = await sqlite_client.make_api_call(
+            ApiCalls.GET_PEOPLE, params={"pagesize": 1}, with_headers=True
+        )
+        assert len(result) == 1
+        assert headers["x-total-count"] == "3"
+
 
 # ===========================================================================
 # API: full-text search (GET_SEARCH)  — issue #21

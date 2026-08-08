@@ -157,10 +157,11 @@ class GrampsSqliteClient:
 
         result = self._dispatch(api_call, params_dict, url_params)
 
-        # _search() reports its own total (across all object types, before
-        # the pagesize cut) instead of len(page) — a full scan can match
-        # more objects than fit on one page.
-        if api_call == ApiCalls.GET_SEARCH:
+        # _search() and _get_list() report their own total (before the
+        # pagesize cut) instead of len(page) — a full scan/filter can match
+        # more objects than fit on one page (see issue #21, #39).
+        is_list_call = api_call in _OBJ_TYPES and not _OBJ_TYPES[api_call][1]
+        if api_call == ApiCalls.GET_SEARCH or is_list_call:
             page, total = result
             if with_headers:
                 return page, {"x-total-count": str(total)}
@@ -307,7 +308,7 @@ class GrampsSqliteClient:
     # GET list
     # ------------------------------------------------------------------
 
-    def _get_list(self, obj_type: str, params: Dict) -> List[Dict]:
+    def _get_list(self, obj_type: str, params: Dict) -> Tuple[List[Dict], int]:
         """
         List objects with optional filtering and pagination.
 
@@ -316,7 +317,8 @@ class GrampsSqliteClient:
             params:   Query parameters (pagesize, page, gramps_id, gql, …).
 
         Returns:
-            Paginated list of matching object dicts.
+            Tuple of (page, total_match_count), where total_match_count is
+            the number of matches before the pagesize cut (see issue #39).
         """
         pagesize = int(params.get("pagesize", 20))
         page = int(params.get("page", 1))
@@ -329,7 +331,8 @@ class GrampsSqliteClient:
         # Fast path: gramps_id is SQL-indexed — skip the full table scan.
         if gramps_id_filter and not name_filter and not gql:
             obj = self._db.get_by_id(obj_type, gramps_id_filter)
-            return [obj] if obj else []
+            found = [obj] if obj else []
+            return found, len(found)
 
         results = []
         for obj in self._db.all(obj_type):
@@ -342,7 +345,7 @@ class GrampsSqliteClient:
             results.append(obj)
 
         start = (page - 1) * pagesize
-        return results[start: start + pagesize]
+        return results[start : start + pagesize], len(results)
 
     def _text_match(self, obj_type: str, obj: Dict, query: str) -> bool:
         """Substring match for list filtering (same logic as GrampsDirectClient)."""
