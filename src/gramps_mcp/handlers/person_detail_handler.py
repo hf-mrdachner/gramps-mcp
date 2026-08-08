@@ -164,19 +164,21 @@ async def format_person_detail(client, tree_id: str, handle: str) -> str:
                 dates = ", ".join(filter(None, [spouse_birth, spouse_death]))
                 result += f"Spouse:\n- {spouse_name} - {spouse_id} - {dates}\n"
 
-                # Children of this spouse
-                children = extended.get("children", [])
-                if children:
-                    result += "Children:\n"
-                    for child in children:
-                        child = await redact_if_living(child, client, tree_id)
-                        child_name = _extract_person_name(child)
-                        child_id = child.get("gramps_id", "")
-                        child_birth, child_death = await _get_birth_death_dates(
-                            client, tree_id, child
-                        )
-                        dates = ", ".join(filter(None, [child_birth, child_death]))
-                        result += f"- {child_name} - {child_id} - {dates}\n"
+            # Children of this family — shown regardless of whether a second
+            # parent (spouse) is present, so single-parent families aren't
+            # silently dropped from the person view.
+            children = extended.get("children", [])
+            if children:
+                result += "Children:\n"
+                for child in children:
+                    child = await redact_if_living(child, client, tree_id)
+                    child_name = _extract_person_name(child)
+                    child_id = child.get("gramps_id", "")
+                    child_birth, child_death = await _get_birth_death_dates(
+                        client, tree_id, child
+                    )
+                    dates = ", ".join(filter(None, [child_birth, child_death]))
+                    result += f"- {child_name} - {child_id} - {dates}\n"
         except Exception:
             continue
 
