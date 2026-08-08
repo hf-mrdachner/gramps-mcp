@@ -269,3 +269,25 @@ class TestFamilyIdsExposed:
 
         assert f"as child: {parent_family['gramps_id']}" in result
         assert "as parent:" not in result
+
+    @pytest.mark.asyncio
+    async def test_summary_line_lists_multiple_own_families(self, write_client):
+        db = write_client._db
+        person = _new_person(db, "Pat", "Doe")
+        spouse1 = _new_person(db, "Sam", "Roe")
+        spouse2 = _new_person(db, "Alex", "Fox")
+
+        family1 = db.put("family", {
+            "father_handle": person["handle"], "mother_handle": spouse1["handle"],
+        })
+        family2 = db.put("family", {
+            "father_handle": person["handle"], "mother_handle": spouse2["handle"],
+        })
+
+        result = await format_person_detail(write_client, "default", person["handle"])
+
+        as_parent_line = next(
+            line for line in result.splitlines() if line.startswith("Family IDs")
+        )
+        assert family1["gramps_id"] in as_parent_line
+        assert family2["gramps_id"] in as_parent_line
