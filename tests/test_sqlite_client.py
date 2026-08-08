@@ -325,17 +325,52 @@ class TestSearchCandidatesPrefilter:
        Python's str.lower() (Unicode-aware) or German names lose matches.
     """
 
-    @pytest.mark.asyncio
-    async def test_event_type_search_matches_via_type_code_not_literal_text(
-        self, sqlite_client
-    ):
-        result = await sqlite_client.make_api_call(
-            ApiCalls.GET_SEARCH, params={"query": "birth", "pagesize": 10}
+    def test_event_type_search_matches_via_type_code_not_literal_text(self):
+        """
+        Independent throwaway DB with a "clean" handle/description (no
+        literal "birth" substring anywhere in json_data) -- the shared
+        session fixture's event handles (e.g. h_ev_birth_john) would let
+        this pass on the raw-text prefilter alone and prove nothing about
+        the type-code special case this test exists to guard.
+        """
+        import sqlite3
+
+        from gramps_mcp._gramps_sqlite import GrampsSqliteDB, _denorm_date
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(
+            """
+            CREATE TABLE event (
+                handle VARCHAR(50) PRIMARY KEY NOT NULL,
+                json_data TEXT, gramps_id TEXT,
+                description TEXT, place VARCHAR(50),
+                change INTEGER DEFAULT 0, private INTEGER DEFAULT 0
+            );
+            """
         )
-        birth_ids = {
-            r["object"]["gramps_id"] for r in result if r["object_type"] == "event"
+        data = {
+            "_class": "Event", "handle": "h_clean_001", "gramps_id": "E0099",
+            "type": {"_class": "EventType", "value": 12, "string": ""},
+            "date": _denorm_date({}), "description": "", "place": None,
+            "citation_list": [], "note_list": [], "media_list": [],
+            "attribute_list": [], "tag_list": [], "change": 0, "private": False,
         }
-        assert birth_ids == {"E0001", "E0003", "E0005"}
+        conn.execute(
+            "INSERT INTO event (handle,gramps_id,json_data,description,change,private) "
+            "VALUES (?,?,?,?,?,?)",
+            ["h_clean_001", "E0099", json.dumps(data, ensure_ascii=False), "", 0, 0],
+        )
+        conn.commit()
+        db = GrampsSqliteDB(conn=conn, db_path=":memory:", read_only=False)
+
+        # Sanity check: the raw-text prefilter alone must NOT find this row,
+        # otherwise this test wouldn't actually exercise the type-code path.
+        assert db._store("event").search("birth") == []
+
+        candidates = db.search_candidates("event", "birth")
+
+        assert [c["gramps_id"] for c in candidates] == ["E0099"]
 
     def test_ci_contains_is_unicode_case_insensitive(self):
         from gramps_mcp._gramps_sqlite import _ci_contains
