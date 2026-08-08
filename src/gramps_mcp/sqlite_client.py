@@ -350,12 +350,19 @@ class GrampsSqliteClient:
     def _text_match(self, obj_type: str, obj: Dict, query: str) -> bool:
         """Substring match for list filtering (same logic as GrampsDirectClient)."""
         if obj_type == "person":
-            pn = obj.get("primary_name", {})
-            first = pn.get("first_name", "").lower()
-            surnames = " ".join(
-                s.get("surname", "") for s in pn.get("surname_list", [])
-            ).lower()
-            return query in first or query in surnames
+            # Also scan alternate_names (issue #42) - not just primary_name.
+            # The SQL prefilter (search_candidates) already scans raw
+            # json_data and would surface a person on an alternate-name-only
+            # match; checking primary_name alone here silently dropped it.
+            names = [obj.get("primary_name", {})] + obj.get("alternate_names", [])
+            for pn in names:
+                first = pn.get("first_name", "").lower()
+                surnames = " ".join(
+                    s.get("surname", "") for s in pn.get("surname_list", [])
+                ).lower()
+                if query in first or query in surnames:
+                    return True
+            return False
         if obj_type in ("source", "repository"):
             return query in obj.get("title", obj.get("name", "")).lower()
         if obj_type == "place":

@@ -114,12 +114,13 @@ def _event(handle: str, gramps_id: str, ev_type: int, year: int,
 
 
 def _person(handle: str, gramps_id: str, given: str, surname: str,
-            gender: int, erefs: list, birth_idx: int = -1) -> dict:
+            gender: int, erefs: list, birth_idx: int = -1,
+            alt_names: list = None) -> dict:
     return {
         "_class": "Person", "handle": handle, "gramps_id": gramps_id,
         "gender": gender,
         "primary_name": _name(given, surname),
-        "alternate_names": [],
+        "alternate_names": alt_names or [],
         "birth_ref_index": birth_idx, "death_ref_index": -1,
         "event_ref_list": erefs,
         "family_list": [], "parent_family_list": [],
@@ -692,6 +693,136 @@ class TestFamilyBonusIsRoleAware:
         candidates = find_duplicate_persons(conn, min_score=7.0)
         ids = {frozenset([c.winner_id, c.loser_id]) for c in candidates}
         assert frozenset(["I_P1", "I_P2"]) in ids
+
+
+# ---------------------------------------------------------------------------
+# 3d. find_duplicate_persons — also matches via alternate_names (issue #42)
+#
+# Previously find_duplicate_persons grouped and scored strictly on
+# primary_name, so a person whose duplicate-indicating name was recorded as
+# an alternate name (not primary) was invisible to dedup even though the
+# name is stored and GQL-queryable (PR #41's add_alternate_name_to_person).
+# ---------------------------------------------------------------------------
+
+def _make_two_person_db(p_a: dict, p_b: dict) -> sqlite3.Connection:
+    """In-memory DB containing exactly the two given persons, no relations."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(_SCHEMA)
+    _insert_person(conn, p_a["primary_name"]["first_name"],
+                    p_a["primary_name"]["surname_list"][0]["surname"],
+                    p_a["gender"], p_a)
+    _insert_person(conn, p_b["primary_name"]["first_name"],
+                    p_b["primary_name"]["surname_list"][0]["surname"],
+                    p_b["gender"], p_b)
+    conn.commit()
+    return conn
+
+
+class TestFindDuplicatePersonsMatchesAlternateNames:
+    def test_alternate_name_matches_other_persons_primary_name(self):
+        p_a = _person("h_a", "I_A", "Hans", "Mueller", 1, [])
+        p_b = _person("h_b", "I_B", "Johann", "Schmidt", 1, [],
+                       alt_names=[_name("Hans", "Mueller")])
+        conn = _make_two_person_db(p_a, p_b)
+
+        candidates = find_duplicate_persons(conn)
+
+        ids = {frozenset([c.winner_id, c.loser_id]) for c in candidates}
+        assert frozenset(["I_A", "I_B"]) in ids
+
+    def test_alternate_name_matches_other_persons_alternate_name(self):
+        p_a = _person("h_a", "I_A", "Karl", "Fischer", 1, [],
+                       alt_names=[_name("Hans", "Mueller")])
+        p_b = _person("h_b", "I_B", "Johann", "Schmidt", 1, [],
+                       alt_names=[_name("Hans", "Mueller")])
+        conn = _make_two_person_db(p_a, p_b)
+
+        candidates = find_duplicate_persons(conn)
+
+        ids = {frozenset([c.winner_id, c.loser_id]) for c in candidates}
+        assert frozenset(["I_A", "I_B"]) in ids
+
+    def test_unrelated_alternate_names_do_not_cause_false_match(self):
+        p_a = _person("h_a", "I_A", "Karl", "Fischer", 1, [],
+                       alt_names=[_name("Hans", "Mueller")])
+        p_b = _person("h_b", "I_B", "Johann", "Schmidt", 1, [],
+                       alt_names=[_name("Peter", "Weber")])
+        conn = _make_two_person_db(p_a, p_b)
+
+        candidates = find_duplicate_persons(conn)
+
+        assert candidates == []
+
+    def test_reason_mentions_alternate_name_match(self):
+        p_a = _person("h_a", "I_A", "Hans", "Mueller", 1, [])
+        p_b = _person("h_b", "I_B", "Johann", "Schmidt", 1, [],
+                       alt_names=[_name("Hans", "Mueller")])
+        conn = _make_two_person_db(p_a, p_b)
+
+        candidates = find_duplicate_persons(conn)
+
+        pair = next(c for c in candidates
+                    if frozenset([c.winner_id, c.loser_id]) == frozenset(["I_A", "I_B"]))
+        assert any("alternate name" in r for r in pair.reasons)
+
+    def test_result_names_still_show_primary_name_not_matched_alternate(self):
+        p_a = _person("h_a", "I_A", "Hans", "Mueller", 1, [])
+        p_b = _person("h_b", "I_B", "Johann", "Schmidt", 1, [],
+                       alt_names=[_name("Hans", "Mueller")])
+        conn = _make_two_person_db(p_a, p_b)
+
+        candidates = find_duplicate_persons(conn)
+
+        pair = next(c for c in candidates
+                    if frozenset([c.winner_id, c.loser_id]) == frozenset(["I_A", "I_B"]))
+        assert {pair.winner_name, pair.loser_name} == {"Hans Mueller", "Johann Schmidt"}
+
+    def test_pair_not_duplicated_when_matching_via_multiple_shared_names(self):
+        # Both primary_name AND alternate_names line up between A and B, so
+        # the pair shares two different name-index keys -- must still yield
+        # exactly one candidate, not one per shared key.
+        p_a = _person("h_a", "I_A", "Hans", "Mueller", 1, [],
+                       alt_names=[_name("Peter", "Klein")])
+        p_b = _person("h_b", "I_B", "Hans", "Mueller", 1, [],
+                       alt_names=[_name("Peter", "Klein")])
+        conn = _make_two_person_db(p_a, p_b)
+
+        candidates = find_duplicate_persons(conn)
+
+        matching = [c for c in candidates
+                    if frozenset([c.winner_id, c.loser_id]) == frozenset(["I_A", "I_B"])]
+        assert len(matching) == 1
+
+    def test_direct_relatives_excluded_even_when_matched_via_alternate_name(self):
+        # Father/child sharing a name only via B's alternate name must still
+        # be excluded, same as the primary-name case.
+        p_a = _person("h_a", "I_A", "Hans", "Mueller", 1, [])
+        p_b = _person("h_b", "I_B", "Johann", "Schmidt", 1, [],
+                       alt_names=[_name("Hans", "Mueller")])
+        p_a["family_list"] = ["h_fam"]
+        p_b["parent_family_list"] = ["h_fam"]
+        fam = {
+            "_class": "Family", "handle": "h_fam", "gramps_id": "F0001",
+            "father_handle": "h_a", "mother_handle": None,
+            "child_ref_list": [_cref("h_b")],
+            "event_ref_list": [],
+            "citation_list": [], "note_list": [], "media_list": [], "tag_list": [],
+            "change": 0, "private": False,
+        }
+        conn = _make_two_person_db(p_a, p_b)
+        conn.execute(
+            "INSERT INTO family (handle, gramps_id, json_data, father_handle, mother_handle) "
+            "VALUES (?,?,?,?,?)",
+            [fam["handle"], fam["gramps_id"], json.dumps(fam),
+             fam["father_handle"], fam["mother_handle"]],
+        )
+        conn.commit()
+
+        candidates = find_duplicate_persons(conn)
+
+        ids = {frozenset([c.winner_id, c.loser_id]) for c in candidates}
+        assert frozenset(["I_A", "I_B"]) not in ids
 
 
 # ---------------------------------------------------------------------------
