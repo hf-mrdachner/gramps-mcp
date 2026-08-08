@@ -37,6 +37,7 @@ from pydantic import BaseModel, Field
 from .models.parameters.citation_params import CitationData
 from .models.parameters.delete_params import DeleteObjectParams
 from .models.parameters.link_edit_params import (
+    AddChildToFamilyParams,
     AddCitationToEventParams,
     AddEventToFamilyParams,
     AddEventToPersonParams,
@@ -100,6 +101,7 @@ from .tools import (
 )
 from .tools.delete import delete_object_tool
 from .tools.link_edit import (
+    add_child_to_family_tool,
     add_event_to_family_tool,
     add_event_to_person_tool,
     move_attachment_tool,
@@ -387,6 +389,19 @@ async def _handle_remove_child_from_family(args: Dict) -> Any:
     return await remove_child_from_family_tool(
         family_handle=args["family_handle"],
         child_handle=args["child_handle"],
+    )
+
+
+async def _handle_add_child_to_family(args: Dict) -> Any:
+    """Handler for add_child_to_family with gramps_id resolution."""
+    args = await resolve_handles(
+        args, {"family_handle": "family", "child_handle": "person"}, get_client()
+    )
+    return await add_child_to_family_tool(
+        family_handle=args["family_handle"],
+        child_handle=args["child_handle"],
+        frel=args.get("frel", "Birth"),
+        mrel=args.get("mrel", "Birth"),
     )
 
 
@@ -803,6 +818,19 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "schema": RemoveChildFromFamilyParams,
         "handler": _handle_remove_child_from_family,
     },
+    "add_child_to_family": {
+        "description": (
+            "Add a child to an existing family without replacing the existing "
+            "child_ref_list. Unlike create_family(child_gramps_ids=[...]), which "
+            "replaces the whole list, this only appends — use it to add one child "
+            "to a family that already has other children/events without needing to "
+            "re-supply everything else. Both the family's child_ref_list and the "
+            "child person's parent_family_list are updated in a single transaction. "
+            "SQLite backend only."
+        ),
+        "schema": AddChildToFamilyParams,
+        "handler": _handle_add_child_to_family,
+    },
     "move_attachment": {
         "description": (
             "Move a note or media reference from one object to another atomically. "
@@ -887,6 +915,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "create_family",
         "get_family",
         "merge_families",
+        "add_child_to_family",
         "remove_child_from_family",
         "add_event_to_family",
         "remove_event_from_family",

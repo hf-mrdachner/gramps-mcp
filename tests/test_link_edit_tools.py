@@ -342,6 +342,160 @@ class TestRemoveChildFromFamily:
 
 
 # ===========================================================================
+# add_child_to_family
+# ===========================================================================
+
+class TestAddChildToFamily:
+    def test_child_appended_to_family_child_ref_list(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_child_to_family_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_child", "I0001")
+        _insert_family(conn, "h_fam", "F0001")
+
+        result = asyncio.run(
+            add_child_to_family_tool(
+                family_handle="h_fam", child_handle="h_child", db=db
+            )
+        )
+        assert isinstance(result, list) and isinstance(result[0], TextContent)
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+        assert data["child_count"] == 1
+
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle = 'h_fam'"
+        ).fetchone()
+        family_data = json.loads(row["json_data"])
+        refs = [cr["ref"] for cr in family_data.get("child_ref_list", [])]
+        assert "h_child" in refs
+
+    def test_existing_children_not_replaced(self, fresh_db):
+        # The core bug this tool fixes: create_family(child_gramps_ids=[...])
+        # replaces child_ref_list wholesale, silently dropping every existing
+        # child not re-listed. Adding a 2nd child must leave the 1st intact.
+        from gramps_mcp.tools.link_edit import add_child_to_family_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_child1", "I0001")
+        _insert_person(conn, "h_child2", "I0002")
+        _insert_family(conn, "h_fam", "F0001", child_ref_list=[
+            {"_class": "ChildRef", "ref": "h_child1",
+             "frel": {"_class": "ChildRefType", "value": 1, "string": ""},
+             "mrel": {"_class": "ChildRefType", "value": 1, "string": ""},
+             "private": False, "citation_list": [], "note_list": []}
+        ])
+
+        result = asyncio.run(
+            add_child_to_family_tool(
+                family_handle="h_fam", child_handle="h_child2", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["child_count"] == 2
+
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle = 'h_fam'"
+        ).fetchone()
+        family_data = json.loads(row["json_data"])
+        refs = [cr["ref"] for cr in family_data.get("child_ref_list", [])]
+        assert "h_child1" in refs
+        assert "h_child2" in refs
+
+    def test_parent_family_list_updated_for_child(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_child_to_family_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_child", "I0001")
+        _insert_family(conn, "h_fam", "F0001")
+
+        asyncio.run(
+            add_child_to_family_tool(
+                family_handle="h_fam", child_handle="h_child", db=db
+            )
+        )
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = 'h_child'"
+        ).fetchone()
+        child_data = json.loads(row["json_data"])
+        assert "h_fam" in child_data.get("parent_family_list", [])
+
+    def test_no_duplicate_on_double_call(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_child_to_family_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_child", "I0001")
+        _insert_family(conn, "h_fam", "F0001")
+
+        asyncio.run(
+            add_child_to_family_tool(
+                family_handle="h_fam", child_handle="h_child", db=db
+            )
+        )
+        result = asyncio.run(
+            add_child_to_family_tool(
+                family_handle="h_fam", child_handle="h_child", db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "no_change"
+
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle = 'h_fam'"
+        ).fetchone()
+        family_data = json.loads(row["json_data"])
+        assert len(family_data.get("child_ref_list", [])) == 1
+
+    def test_error_on_unknown_family_handle(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_child_to_family_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_child", "I0001")
+
+        with pytest.raises(GrampsAPIError, match="Family.*not found"):
+            asyncio.run(
+                add_child_to_family_tool(
+                    family_handle="nonexistent", child_handle="h_child", db=db
+                )
+            )
+
+    def test_error_on_unknown_child_handle(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_child_to_family_tool
+
+        db, conn = fresh_db
+        _insert_family(conn, "h_fam", "F0001")
+
+        with pytest.raises(GrampsAPIError, match="not found"):
+            asyncio.run(
+                add_child_to_family_tool(
+                    family_handle="h_fam", child_handle="nonexistent", db=db
+                )
+            )
+
+    def test_frel_mrel_default_to_birth(self, fresh_db):
+        from gramps_mcp.tools.link_edit import add_child_to_family_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_child", "I0001")
+        _insert_family(conn, "h_fam", "F0001")
+
+        asyncio.run(
+            add_child_to_family_tool(
+                family_handle="h_fam", child_handle="h_child", db=db
+            )
+        )
+
+        row = conn.execute(
+            "SELECT json_data FROM family WHERE handle = 'h_fam'"
+        ).fetchone()
+        family_data = json.loads(row["json_data"])
+        cref = family_data["child_ref_list"][0]
+        assert cref["frel"]["string"] == "Birth" or cref["frel"]["value"] == 1
+        assert cref["mrel"]["string"] == "Birth" or cref["mrel"]["value"] == 1
+
+
+# ===========================================================================
 # move_attachment
 # ===========================================================================
 
