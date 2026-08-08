@@ -8,6 +8,8 @@ Run with:
     uv run pytest tests/test_sqlite_client.py -v
 """
 
+import json
+
 import pytest
 
 from gramps_mcp.client import GrampsAPIError
@@ -302,6 +304,105 @@ class TestSearch:
         object_types = {r["object_type"] for r in result}
         assert object_types == {"family", "citation", "media"}
 
+
+# ===========================================================================
+# API: search perf prefilter (issue #38) — SQL-level candidate prescreen
+# must not silently drop matches the old full-Python-scan found.
+# ===========================================================================
+
+
+class TestSearchCandidatesPrefilter:
+    """
+    _search()'s SQL prefilter (issue #38) scans json_data with a fast SQL
+    substring test before paying the JSON-parse + normalise cost, and must
+    stay a strict superset of what the old full-Python-scan found. Two ways
+    that can silently break:
+
+    1. Standard EventType display names ("Birth", "Death", ...) are resolved
+       from a numeric code during normalisation and are never literal text
+       in json_data -- a naive raw-text prefilter would miss them.
+    2. SQLite's built-in LIKE only case-folds ASCII; a prefilter must match
+       Python's str.lower() (Unicode-aware) or German names lose matches.
+    """
+
+    @pytest.mark.asyncio
+    async def test_event_type_search_matches_via_type_code_not_literal_text(
+        self, sqlite_client
+    ):
+        result = await sqlite_client.make_api_call(
+            ApiCalls.GET_SEARCH, params={"query": "birth", "pagesize": 10}
+        )
+        birth_ids = {
+            r["object"]["gramps_id"] for r in result if r["object_type"] == "event"
+        }
+        assert birth_ids == {"E0001", "E0003", "E0005"}
+
+    def test_ci_contains_is_unicode_case_insensitive(self):
+        from gramps_mcp._gramps_sqlite import _ci_contains
+
+        assert _ci_contains('{"first_name": "Jürgen Müller"}', "müller")
+        assert _ci_contains('{"first_name": "Jürgen MÜLLER"}', "müller")
+        assert not _ci_contains('{"first_name": "Jürgen Müller"}', "schmidt")
+        assert not _ci_contains(None, "muller")
+
+    def test_search_candidates_finds_unicode_name(self):
+        """
+        Independent throwaway DB (not the shared session fixture), so this
+        doesn't disturb the exact person-count assertions elsewhere.
+        """
+        import sqlite3
+
+        from gramps_mcp._gramps_sqlite import GrampsSqliteDB, _denorm_date
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(
+            """
+            CREATE TABLE person (
+                handle VARCHAR(50) PRIMARY KEY NOT NULL,
+                given_name TEXT, surname TEXT, json_data TEXT,
+                gramps_id TEXT, gender INTEGER,
+                death_ref_index INTEGER DEFAULT -1, birth_ref_index INTEGER DEFAULT -1,
+                change INTEGER DEFAULT 0, private INTEGER DEFAULT 0
+            );
+            """
+        )
+        data = {
+            "_class": "Person", "handle": "h1", "gramps_id": "I0099", "gender": 1,
+            "primary_name": {
+                "_class": "Name", "first_name": "Jürgen",
+                "surname_list": [{
+                    "_class": "Surname", "surname": "Müller", "prefix": "",
+                    "primary": True, "connector": "",
+                    "origintype": {
+                        "_class": "NameOriginType", "value": 1, "string": "",
+                    },
+                }],
+                "suffix": "", "title": "", "call": "", "nick": "", "famnick": "",
+                "group_as": "", "sort_as": 0, "display_as": 0, "private": False,
+                "citation_list": [], "note_list": [],
+                "type": {"_class": "NameType", "value": 2, "string": ""},
+                "date": _denorm_date({}),
+            },
+            "alternate_names": [], "death_ref_index": -1, "birth_ref_index": -1,
+            "event_ref_list": [], "family_list": [], "parent_family_list": [],
+            "media_list": [], "address_list": [], "attribute_list": [], "urls": [],
+            "lds_ord_list": [], "citation_list": [], "note_list": [], "tag_list": [],
+            "person_ref_list": [], "change": 0, "private": False,
+        }
+        conn.execute(
+            "INSERT INTO person "
+            "(handle,gramps_id,json_data,given_name,surname,gender,change,private) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            ["h1", "I0099", json.dumps(data, ensure_ascii=False),
+             "Jürgen", "Müller", 1, 0, 0],
+        )
+        conn.commit()
+        db = GrampsSqliteDB(conn=conn, db_path=":memory:", read_only=False)
+
+        candidates = db.search_candidates("person", "müller")
+
+        assert [c["gramps_id"] for c in candidates] == ["I0099"]
 
 # ===========================================================================
 # API: make_api_call  (write)

@@ -382,13 +382,12 @@ class GrampsSqliteClient:
         hit (see issue #21) — then returns only the first `pagesize` as the
         page.
 
-        Note: this always visits every object type via ``self._db.all()``,
-        which re-queries SQLite on every call (LazyDict does no caching, by
-        design, so writes from Gramps Desktop are visible immediately). On
-        large trees this makes `_search` noticeably slower than the old
-        early-exit version — a known trade-off for correct cross-type
-        totals; pushing the text match into SQL would remove it but is a
-        larger change than this fix.
+        Note: candidates come from ``self._db.search_candidates()``, a SQL-
+        level prefilter (see issue #38) rather than ``self._db.all()`` — it
+        avoids paying the JSON-parse + normalise cost for rows that can't
+        possibly match, which dominates on large trees. The exact per-type
+        ``_text_match`` check below still runs on every candidate, so the
+        prefilter only needs to be a superset (never miss a true match).
 
         Args:
             params: Query parameters; only ``query`` and ``pagesize`` are used.
@@ -405,7 +404,7 @@ class GrampsSqliteClient:
             "person", "family", "event", "place",
             "source", "citation", "note", "media", "repository",
         ):
-            for obj in self._db.all(obj_type):
+            for obj in self._db.search_candidates(obj_type, query):
                 if self._text_match(obj_type, obj, query):
                     matches.append({"object_type": obj_type, "object": obj})
         return matches[:pagesize], len(matches)
