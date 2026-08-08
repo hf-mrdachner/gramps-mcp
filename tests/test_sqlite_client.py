@@ -450,6 +450,113 @@ class TestSearchCandidatesPrefilter:
 
         assert [c["gramps_id"] for c in candidates] == ["I0099"]
 
+
+# ===========================================================================
+# API: _text_match must also scan alternate_names — issue #42
+#
+# search_candidates() (the SQL prefilter) scans raw json_data, so a query
+# that only matches an alternate_names entry survives the prefilter. The
+# exact _text_match() check ran afterwards, though, and only ever inspected
+# primary_name — so the person was found by the prefilter, then silently
+# dropped by the exact filter and never reached the caller.
+# ===========================================================================
+
+
+class TestTextMatchAlternateNames:
+    def _make_client_with_alt_name_person(self):
+        import sqlite3
+
+        from gramps_mcp._gramps_sqlite import GrampsSqliteDB, _denorm_date
+        from gramps_mcp.sqlite_client import GrampsSqliteClient
+
+        def _name(first, surname):
+            return {
+                "_class": "Name", "first_name": first,
+                "surname_list": [{
+                    "_class": "Surname", "surname": surname, "prefix": "",
+                    "primary": True, "connector": "",
+                    "origintype": {
+                        "_class": "NameOriginType", "value": 1, "string": "",
+                    },
+                }],
+                "suffix": "", "title": "", "call": "", "nick": "", "famnick": "",
+                "group_as": "", "sort_as": 0, "display_as": 0, "private": False,
+                "citation_list": [], "note_list": [],
+                "type": {"_class": "NameType", "value": 2, "string": ""},
+                "date": _denorm_date({}),
+            }
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(
+            """
+            CREATE TABLE person (
+                handle VARCHAR(50) PRIMARY KEY NOT NULL,
+                given_name TEXT, surname TEXT, json_data TEXT,
+                gramps_id TEXT, gender INTEGER,
+                death_ref_index INTEGER DEFAULT -1, birth_ref_index INTEGER DEFAULT -1,
+                change INTEGER DEFAULT 0, private INTEGER DEFAULT 0
+            );
+            """
+        )
+        data = {
+            "_class": "Person", "handle": "h1", "gramps_id": "I0099", "gender": 1,
+            "primary_name": _name("Robert", "Stevens"),
+            "alternate_names": [_name("Bob", "Stevenson")],
+            "death_ref_index": -1, "birth_ref_index": -1,
+            "event_ref_list": [], "family_list": [], "parent_family_list": [],
+            "media_list": [], "address_list": [], "attribute_list": [], "urls": [],
+            "lds_ord_list": [], "citation_list": [], "note_list": [], "tag_list": [],
+            "person_ref_list": [], "change": 0, "private": False,
+        }
+        conn.execute(
+            "INSERT INTO person "
+            "(handle,gramps_id,json_data,given_name,surname,gender,change,private) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            ["h1", "I0099", json.dumps(data, ensure_ascii=False),
+             "Robert", "Stevens", 1, 0, 0],
+        )
+        conn.commit()
+        db = GrampsSqliteDB(conn=conn, db_path=":memory:", read_only=False)
+        client = object.__new__(GrampsSqliteClient)
+        client._db = db
+        client._db_path = ":memory:"
+        client._report_cache = {}
+        return client
+
+    @pytest.mark.asyncio
+    async def test_find_anything_matches_alternate_surname(self):
+        client = self._make_client_with_alt_name_person()
+        result = await client.make_api_call(
+            ApiCalls.GET_SEARCH, params={"query": "stevenson", "pagesize": 20}
+        )
+        assert [r["object"]["gramps_id"] for r in result] == ["I0099"]
+
+    @pytest.mark.asyncio
+    async def test_find_anything_matches_alternate_given_name(self):
+        client = self._make_client_with_alt_name_person()
+        result = await client.make_api_call(
+            ApiCalls.GET_SEARCH, params={"query": "bob", "pagesize": 20}
+        )
+        assert [r["object"]["gramps_id"] for r in result] == ["I0099"]
+
+    @pytest.mark.asyncio
+    async def test_person_list_name_filter_matches_alternate_name(self):
+        client = self._make_client_with_alt_name_person()
+        result = await client.make_api_call(
+            ApiCalls.GET_PEOPLE, params={"name": "stevenson"}
+        )
+        assert [r["gramps_id"] for r in result] == ["I0099"]
+
+    @pytest.mark.asyncio
+    async def test_primary_name_still_matches(self):
+        client = self._make_client_with_alt_name_person()
+        result = await client.make_api_call(
+            ApiCalls.GET_SEARCH, params={"query": "stevens", "pagesize": 20}
+        )
+        assert [r["object"]["gramps_id"] for r in result] == ["I0099"]
+
+
 # ===========================================================================
 # API: make_api_call  (write)
 # ===========================================================================

@@ -21,6 +21,7 @@ Scoring mirrors the logic in Gramps' own finddupes.py but is adapted for
 direct SQLite access and extended with:
   - German umlaut normalisation (ö→oe etc.)
   - Family-bonus scoring (shared relatives increase confidence)
+  - Matching on alternate_names, not just primary_name (issue #42)
 """
 
 import json
@@ -405,6 +406,35 @@ def _load_persons(conn: sqlite3.Connection) -> Dict[str, dict]:
     return persons
 
 
+def _name_variants(p: dict) -> List[Tuple[str, str, bool]]:
+    """
+    Return every distinct name a person is recorded under.
+
+    Includes primary_name plus each alternate_names entry (issue #42),
+    deduplicated by normalised (surname, given) so a person is never listed
+    twice under names that only differ in spelling/case.
+
+    Args:
+        p: Augmented person dict (from _load_persons) with _given/_surname.
+
+    Returns:
+        List of (given, surname, is_primary) tuples, primary_name first.
+    """
+    variants = [(p["_given"], p["_surname"], True)]
+    seen = {(normalize(p["_surname"]), normalize(p["_given"]))}
+    for alt in p.get("alternate_names", []):
+        given = alt.get("first_name", "") or ""
+        surname = " ".join(
+            s.get("surname", "") for s in alt.get("surname_list", [])
+        )
+        key = (normalize(surname), normalize(given))
+        if key in seen:
+            continue
+        seen.add(key)
+        variants.append((given, surname, False))
+    return variants
+
+
 def _richness(p: dict) -> int:
     """Count of data fields — used to choose winner (more data = keep)."""
     return (
@@ -424,6 +454,10 @@ def find_duplicate_persons(
 ) -> List[DuplicateCandidate]:
     """
     Scan all persons and return duplicate candidate pairs sorted by score.
+
+    Matches on primary_name and alternate_names on both sides (issue #42),
+    so a name recorded as an alternate rather than the primary still
+    surfaces the pair.
 
     Args:
         conn: SQLite connection to a Gramps database.
@@ -446,19 +480,36 @@ def find_duplicate_persons(
             )
         return hop_relatives_cache[h]
 
-    # Group by normalised (surname, given) for O(n) pair enumeration
-    groups: Dict[tuple, list] = defaultdict(list)
+    # Group by normalised (surname, given) across each person's primary_name
+    # AND alternate_names (issue #42), for O(n) pair enumeration. A person
+    # can appear in more than one group if they have alternate names, so a
+    # match on either side's alternate name still surfaces the pair.
+    name_index: Dict[tuple, List[Tuple[str, str, str, bool]]] = defaultdict(list)
     for h, p in persons.items():
-        key = (normalize(p["_surname"]), normalize(p["_given"]))
-        groups[key].append(h)
+        for given, surname, is_primary in _name_variants(p):
+            key = (normalize(surname), normalize(given))
+            name_index[key].append((h, given, surname, is_primary))
 
     candidates: List[DuplicateCandidate] = []
-    for handles in groups.values():
-        if len(handles) < 2:
+    seen_pairs: set = set()
+    for entries in name_index.values():
+        if len(entries) < 2:
             continue
-        for i in range(len(handles)):
-            for j in range(i + 1, len(handles)):
-                h1, h2 = handles[i], handles[j]
+        for i in range(len(entries)):
+            for j in range(i + 1, len(entries)):
+                h1, given1, surname1, primary1 = entries[i]
+                h2, given2, surname2, primary2 = entries[j]
+
+                # A pair can share more than one name-index key (e.g. both
+                # primary_name and an alternate_names entry line up) - only
+                # score it once. Scoring is identical regardless of which
+                # shared key triggers it: both entries in any one group
+                # normalise to the same key, so the name-comparison part of
+                # similarity_score always maxes out the same way.
+                pair_key = frozenset((h1, h2))
+                if pair_key in seen_pairs:
+                    continue
+                seen_pairs.add(pair_key)
 
                 # Already related within RELATION_EXCLUSION_HOPS (parent,
                 # child, spouse, sibling, or grandparent/uncle-nephew etc.) -
@@ -467,9 +518,15 @@ def find_duplicate_persons(
                     continue
 
                 p1, p2 = persons[h1], persons[h2]
+                v1 = {**p1, "_given": given1, "_surname": surname1}
+                v2 = {**p2, "_given": given2, "_surname": surname2}
                 score, reasons = similarity_score(
-                    p1, p2, birth_years.get(h1), birth_years.get(h2)
+                    v1, v2, birth_years.get(h1), birth_years.get(h2)
                 )
+                if not primary1 or not primary2:
+                    reasons = reasons + [
+                        f"matched via alternate name: '{given1} {surname1}'"
+                    ]
                 if score <= 0:
                     continue  # hard mismatch - no family bonus can rescue this
                 if score < 8:
