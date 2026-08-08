@@ -16,6 +16,7 @@ from gramps_mcp.client import GrampsAPIError
 from gramps_mcp.tools._sqlite_helpers import (
     _make_child_ref,
     _make_event_ref,
+    _make_name,
     _read_object,
     _require_sqlite_db,
     _resolve_handle,
@@ -587,6 +588,96 @@ async def move_attachment_tool(
             "handle": handle,
             "from": {"type": from_type, "handle": from_handle},
             "to": {"type": to_type, "handle": to_handle},
+        },
+        ensure_ascii=False,
+    ))]
+
+
+# ---------------------------------------------------------------------------
+# Tool 5: add_alternate_name_to_person
+# ---------------------------------------------------------------------------
+
+
+def _name_identity(name: dict) -> tuple:
+    """Build a comparison key (first_name, surnames, type) to detect duplicates."""
+    surnames = tuple(
+        sn.get("surname", "") for sn in name.get("surname_list", [])
+    )
+    return (
+        name.get("first_name", ""),
+        surnames,
+        name.get("type", {}).get("value"),
+    )
+
+
+async def add_alternate_name_to_person_tool(
+    person_handle: Optional[str] = None,
+    person_gramps_id: Optional[str] = None,
+    name: Optional[dict] = None,
+    db: Any = None,
+) -> List[TextContent]:
+    """
+    Append a Name object to a person's alternate_names without replacing it.
+
+    Unlike smuggling a name into create_person's untyped primary_name field,
+    this appends a properly structured Gramps Name to alternate_names only,
+    leaving primary_name and every other field untouched. SQLite backend only.
+
+    If a name with the same first_name, surname(s), and type is already
+    present, this is a no-op (matches add_event_to_person/add_child_to_family's
+    equivalent no-op behavior for repeat calls).
+
+    Args:
+        person_handle: Handle of the person.
+        person_gramps_id: Gramps ID of the person (alternative to person_handle).
+        name: Name object dict (e.g. first_name, surname_list, type, suffix).
+        db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
+
+    Returns:
+        List[TextContent] with JSON result, person_handle, alternate_name_count.
+
+    Raises:
+        GrampsAPIError: If backend is not SQLite, person not found, or name missing.
+    """
+    db = _require_sqlite_db(db, "add_alternate_name_to_person")
+    conn = db._conn
+
+    if not name or not isinstance(name, dict):
+        raise GrampsAPIError("name is required and must be a Name object dict")
+
+    person_handle = _resolve_handle(
+        conn, "person", person_handle, person_gramps_id, "Person"
+    )
+    person_data = _read_object(conn, "person", person_handle, "Person")
+
+    new_name = _make_name(name)
+    alternate_names = person_data.get("alternate_names", [])
+
+    existing_identities = {
+        _name_identity(n) for n in alternate_names if isinstance(n, dict)
+    }
+    if _name_identity(new_name) in existing_identities:
+        return [TextContent(type="text", text=json.dumps(
+            {
+                "result": "no_change",
+                "message": (
+                    "An identical alternate name is already present on this person."
+                ),
+            },
+            ensure_ascii=False,
+        ))]
+
+    alternate_names.append(new_name)
+    person_data["alternate_names"] = alternate_names
+
+    with conn:
+        _write_person(conn, person_handle, person_data)
+
+    return [TextContent(type="text", text=json.dumps(
+        {
+            "result": "ok",
+            "person_handle": person_handle,
+            "alternate_name_count": len(alternate_names),
         },
         ensure_ascii=False,
     ))]
