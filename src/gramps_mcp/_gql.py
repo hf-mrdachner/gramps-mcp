@@ -33,6 +33,8 @@ conservative but safe: users see fewer results rather than wrong ones.
 import re
 from typing import Any, Dict, Optional
 
+from .client import GrampsAPIError
+
 
 def gql_match(obj: Dict, gql: str) -> bool:
     """
@@ -126,9 +128,20 @@ _GET_RE = re.compile(r"^get_\w+$")
 
 
 def _resolve(obj: Any, path: str) -> Optional[Any]:
-    """Walk a dot-separated path; return None if any step fails."""
+    """
+    Walk a dot-separated path; return None if any step legitimately has no
+    value (e.g. an optional field that's unset).
+
+    Raises:
+        GrampsAPIError: If the *first* path segment isn't a key on the root
+            object at all — almost always an unrecognized/misspelled field
+            name (e.g. ``father.gramps_id`` instead of ``father_handle``),
+            which previously silently evaluated to "no match" instead of
+            surfacing as a query error. Only the first segment is checked:
+            deeper segments legitimately vary by which sub-object is present.
+    """
     current = obj
-    for part in path.split("."):
+    for i, part in enumerate(path.split(".")):
         if current is None:
             return None
 
@@ -146,12 +159,16 @@ def _resolve(obj: Any, path: str) -> Optional[Any]:
         m = re.fullmatch(r"(\w+)\[(\d+)\]", part)
         if m:
             key, idx = m.group(1), int(m.group(2))
+            if i == 0 and isinstance(current, dict) and key not in current:
+                raise GrampsAPIError(f"Unrecognized property in GQL query: '{key}'")
             arr = current.get(key, []) if isinstance(current, dict) else None
             if isinstance(arr, list) and idx < len(arr):
                 current = arr[idx]
             else:
                 return None
         else:
+            if i == 0 and isinstance(current, dict) and part not in current:
+                raise GrampsAPIError(f"Unrecognized property in GQL query: '{part}'")
             current = current.get(part) if isinstance(current, dict) else None
 
     return current
