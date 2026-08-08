@@ -32,7 +32,7 @@ Supported GRAMPS_DB_PATH values:
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from pydantic import BaseModel
 
@@ -109,6 +109,15 @@ class GrampsDirectClient:
                 params_dict = params
 
         result = self._dispatch(api_call, params_dict, url_params)
+
+        # _search() reports its own total (across all object types, before
+        # the pagesize cut) instead of len(page) — a full scan can match
+        # more objects than fit on one page.
+        if api_call == ApiCalls.GET_SEARCH:
+            page, total = result
+            if with_headers:
+                return page, {"x-total-count": str(total)}
+            return page
 
         if with_headers:
             count = len(result) if isinstance(result, list) else 1
@@ -344,27 +353,42 @@ class GrampsDirectClient:
     # Full-text search
     # ------------------------------------------------------------------
 
-    def _search(self, params: Dict) -> List[Dict]:
+    def _search(self, params: Dict) -> Tuple[List[Dict], int]:
+        """
+        Full-text search across all object types.
+
+        Scans every object type in full so the reported total reflects all
+        matches, not just however many were found before a per-type cap was
+        hit (see issue #21, fixed for the SQLite backend in #37; this is the
+        same fix for the XML/.gpkg backend, see issue #40) — then returns
+        only the first `pagesize` as the page.
+
+        Unlike the SQLite backend, `self._db.all()` here is a plain
+        in-memory dict lookup (the XML file is parsed once at open time), so
+        scanning every object type carries no extra query cost.
+
+        Args:
+            params: Query parameters; only ``query`` and ``pagesize`` are used.
+
+        Returns:
+            Tuple of (page, total_match_count).
+        """
         query = (params.get("query") or "").lower()
         pagesize = int(params.get("pagesize", 20))
 
         if not query:
-            return []
+            return [], 0
 
-        results = []
+        matches = []
         for obj_type in (
             "person", "family", "event", "place",
             "source", "citation", "note", "media", "repository",
         ):
-            if len(results) >= pagesize:
-                break
             for obj in self._db.all(obj_type):
-                if len(results) >= pagesize:
-                    break
                 if self._text_match(obj_type, obj, query):
-                    results.append({"object_type": obj_type, "object": obj})
+                    matches.append({"object_type": obj_type, "object": obj})
 
-        return results
+        return matches[:pagesize], len(matches)
 
     # ------------------------------------------------------------------
     # Tree info
