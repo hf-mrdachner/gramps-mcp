@@ -309,6 +309,69 @@ class TestGetCitationTool:
         text = _result_text(result)
         assert "Keine Verkn" in text  # "Keine Verknüpfungen gefunden"
 
+    @pytest.mark.asyncio
+    async def test_shows_attached_media(self, write_client):
+        from gramps_mcp.tools.search_details import get_citation_tool
+
+        conn = write_client._db._conn
+        data = {
+            "_class": "Citation", "handle": "h_ci_media", "gramps_id": "C0097",
+            "page": "", "confidence": 2, "source_handle": "h_so_civil",
+            "date": {"_class": "Date", "calendar": 0, "modifier": 0, "quality": 0,
+                     "dateval": [0, 0, 0, False], "text": "", "sortval": 0,
+                     "newyear": 0, "format": None},
+            "note_list": [], "attribute_list": [],
+            # h_me_photo / O0001 already exists in the conftest_sqlite fixture
+            "media_list": [{"_class": "MediaRef", "ref": "h_me_photo", "rect": None,
+                            "private": False, "note_list": [], "attribute_list": [],
+                            "citation_list": []}],
+            "tag_list": [], "change": 0, "private": False,
+        }
+        conn.execute(
+            "INSERT INTO citation (handle,gramps_id,json_data,page,confidence,source_handle,change,private) "
+            "VALUES (?,?,?,?,?,?,0,0)",
+            ("h_ci_media", "C0097", json.dumps(data), "", 2, "h_so_civil"),
+        )
+        conn.commit()
+
+        result = await get_citation_tool.__wrapped__(write_client, {"gramps_id": "C0097"})
+        text = _result_text(result)
+        assert "O0001" in text
+
+    @pytest.mark.asyncio
+    async def test_shows_attached_note(self, write_client):
+        from gramps_mcp.tools.search_details import get_citation_tool
+        # C0001 = h_ci_birth already has note_list = ["h_no_john"] (N0001)
+        result = await get_citation_tool.__wrapped__(write_client, {"gramps_id": "C0001"})
+        text = _result_text(result)
+        assert "N0001" in text
+
+    @pytest.mark.asyncio
+    async def test_no_source_handled_gracefully(self, write_client):
+        from gramps_mcp.tools.search_details import get_citation_tool
+
+        conn = write_client._db._conn
+        data = {
+            "_class": "Citation", "handle": "h_ci_nosource", "gramps_id": "C0096",
+            "page": "loose page", "confidence": 2, "source_handle": None,
+            "date": {"_class": "Date", "calendar": 0, "modifier": 0, "quality": 0,
+                     "dateval": [0, 0, 0, False], "text": "", "sortval": 0,
+                     "newyear": 0, "format": None},
+            "note_list": [], "media_list": [], "attribute_list": [],
+            "tag_list": [], "change": 0, "private": False,
+        }
+        conn.execute(
+            "INSERT INTO citation (handle,gramps_id,json_data,page,confidence,source_handle,change,private) "
+            "VALUES (?,?,?,?,?,?,0,0)",
+            ("h_ci_nosource", "C0096", json.dumps(data), "loose page", 2, None),
+        )
+        conn.commit()
+
+        result = await get_citation_tool.__wrapped__(write_client, {"gramps_id": "C0096"})
+        text = _result_text(result)
+        assert "loose page" in text
+        assert "C0096" in text
+
 
 # ---------------------------------------------------------------------------
 # merge_places_tool (dry_run + write)

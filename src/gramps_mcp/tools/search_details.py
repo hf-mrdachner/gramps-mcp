@@ -330,7 +330,9 @@ async def get_citation_tool(client, arguments: Dict) -> List[TextContent]:
     Get citation details: page, date, confidence, source, and attributes
     (including _APID, used by Ancestry-style record resolution). Also finds
     which persons/families/events reference this citation.
-    Scans all persons/families/events — fact-based, no guessing.
+    Scans all persons/families/events — fact-based, no guessing. Citations
+    attached only to other object types (media, places, sources, repositories)
+    are not found by this scan.
     """
     try:
         from ..gramps_id import resolve_handles
@@ -402,6 +404,26 @@ async def get_citation_tool(client, arguments: Dict) -> List[TextContent]:
                     continue
             if note_ids:
                 lines.append(f"* Notizen: {', '.join(note_ids)}")
+
+        media_list = citation.get("media_list", [])
+        if media_list:
+            media_ids = []
+            for media_ref in media_list:
+                if not isinstance(media_ref, dict):
+                    continue
+                media_handle = media_ref.get("ref", "")
+                if not media_handle:
+                    continue
+                try:
+                    media = await client.make_api_call(
+                        ApiCalls.GET_MEDIA_ITEM, tree_id=tree_id, handle=media_handle
+                    )
+                    if media:
+                        media_ids.append(media.get("gramps_id", ""))
+                except Exception:
+                    continue
+            if media_ids:
+                lines.append(f"* Medien: {', '.join(media_ids)}")
 
         # Find persons/families/events referencing this citation — scan all,
         # GQL cannot search inside arrays
