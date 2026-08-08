@@ -1100,6 +1100,58 @@ def get_admin_tools() -> str:
     return _generate_tool_group_resource("admin")
 
 
+# Resources registered on `app` (FastMCP) above are only served over the HTTP
+# transport. The stdio transport (the one Claude Desktop/Claude Code actually
+# use — see main()) builds a *separate* low-level Server instance in
+# run_stdio_server() that never learns about them, so gql://documentation and
+# friends were advertised in find_type's tool description but unreachable in
+# practice — see #19. RESOURCE_REGISTRY is the single source of truth used to
+# wire the same resources into that stdio server too.
+RESOURCE_REGISTRY: Dict[str, Any] = {
+    "gql://documentation": get_gql_documentation,
+    "gramps://usage-guide": get_usage_guide,
+    "gramps://tools/person": get_person_tools,
+    "gramps://tools/event": get_event_tools,
+    "gramps://tools/citation": get_citation_tools,
+    "gramps://tools/family": get_family_tools,
+    "gramps://tools/search": get_search_tools,
+    "gramps://tools/admin": get_admin_tools,
+}
+
+
+def list_resources() -> list:
+    """Build the MCP Resource list from RESOURCE_REGISTRY."""
+    from mcp.types import Resource
+
+    return [
+        Resource(
+            uri=uri,
+            name=uri,
+            description=(fn.__doc__ or "").strip(),
+            mimeType="text/markdown",
+        )
+        for uri, fn in RESOURCE_REGISTRY.items()
+    ]
+
+
+def read_resource(uri: str) -> str:
+    """Load a resource's content by URI.
+
+    Args:
+        uri: Resource URI (e.g. 'gql://documentation').
+
+    Returns:
+        The resource's Markdown content.
+
+    Raises:
+        ValueError: If the URI isn't in RESOURCE_REGISTRY.
+    """
+    fn = RESOURCE_REGISTRY.get(str(uri))
+    if fn is None:
+        raise ValueError(f"Unknown resource: {uri}")
+    return fn()
+
+
 # Add custom routes to the FastMCP app
 @app.custom_route("/", ["GET"])
 async def root(request):
@@ -1155,6 +1207,19 @@ async def run_stdio_server():
             return await TOOL_REGISTRY[name]["handler"](arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
+
+    @server.list_resources()
+    async def handle_list_resources():
+        """List all available resources (see #19)."""
+        return list_resources()
+
+    @server.read_resource()
+    async def handle_read_resource(uri):
+        """Read a resource's content by URI (see #19)."""
+        from mcp.server.lowlevel.helper_types import ReadResourceContents
+
+        content = read_resource(uri)
+        return [ReadResourceContents(content=content, mime_type="text/markdown")]
 
     # Run the server with stdio transport
     async with stdio_server() as (read_stream, write_stream):

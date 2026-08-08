@@ -179,6 +179,26 @@ class TestApiRead:
         assert p["gramps_id"] == "I0001"
 
     @pytest.mark.asyncio
+    async def test_gql_filter_matches_correct_field(self, sqlite_client):
+        # End-to-end repro from issue #19: the corrected query (father_handle,
+        # not father.gramps_id) must work through the full make_api_call path.
+        families = await sqlite_client.make_api_call(
+            ApiCalls.GET_FAMILIES, params={"gql": "father_handle = 'h_pe_john'"}
+        )
+        assert any(f["handle"] == "h_fa_smith" for f in families)
+
+    @pytest.mark.asyncio
+    async def test_gql_filter_unrecognized_field_raises(self, sqlite_client):
+        # End-to-end repro from issue #19: an unrecognized property name
+        # (father.gramps_id — the real field is father_handle) must raise a
+        # clear error through the full make_api_call path, not silently
+        # return zero results.
+        with pytest.raises(GrampsAPIError, match="father"):
+            await sqlite_client.make_api_call(
+                ApiCalls.GET_FAMILIES, params={"gql": "father.gramps_id = 'I0001'"}
+            )
+
+    @pytest.mark.asyncio
     async def test_get_person_extended(self, sqlite_client):
         p = await sqlite_client.make_api_call(
             ApiCalls.GET_PERSON, params={"extend": "all"}, handle="h_pe_john"
