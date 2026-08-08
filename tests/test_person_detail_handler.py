@@ -132,3 +132,79 @@ class TestSingleParentChildrenSection:
         result = await format_person_detail(write_client, "default", father["handle"])
 
         assert "Children:" not in result
+
+
+class TestMultipleParentFamilyLabels:
+    @pytest.mark.asyncio
+    async def test_each_parent_family_gets_its_own_labeled_block(self, write_client):
+        db = write_client._db
+        a = _new_person(db, "Aaron", "Smith")
+        b = _new_person(db, "Beth", "Smith")
+        c = _new_person(db, "Carl", "Jones")
+        d = _new_person(db, "Dora", "Jones")
+        person = _new_person(db, "Pat", "Doe")
+
+        family1 = db.put("family", {
+            "father_handle": a["handle"], "mother_handle": b["handle"],
+            "child_handles": [person["handle"]],
+        })
+        family2 = db.put("family", {
+            "father_handle": c["handle"], "mother_handle": d["handle"],
+            "child_handles": [person["handle"]],
+        })
+
+        result = await format_person_detail(write_client, "default", person["handle"])
+
+        assert f"Parents: (family {family1['gramps_id']})" in result
+        assert f"Parents: (family {family2['gramps_id']})" in result
+        # Second family's parents must not leak into the first family's block
+        assert result.index("Aaron") < result.index(f"family {family2['gramps_id']}")
+        assert result.index("Carl") > result.index(f"family {family2['gramps_id']}")
+
+    @pytest.mark.asyncio
+    async def test_siblings_labeled_per_family_not_merged(self, write_client):
+        db = write_client._db
+        a = _new_person(db, "Aaron", "Smith")
+        b = _new_person(db, "Beth", "Smith")
+        c = _new_person(db, "Carl", "Jones")
+        d = _new_person(db, "Dora", "Jones")
+        person = _new_person(db, "Pat", "Doe")
+        sibling1 = _new_person(db, "Sam", "Smith")
+        sibling2 = _new_person(db, "Sue", "Jones")
+
+        db.put("family", {
+            "father_handle": a["handle"], "mother_handle": b["handle"],
+            "child_handles": [person["handle"], sibling1["handle"]],
+        })
+        family2 = db.put("family", {
+            "father_handle": c["handle"], "mother_handle": d["handle"],
+            "child_handles": [person["handle"], sibling2["handle"]],
+        })
+
+        result = await format_person_detail(write_client, "default", person["handle"])
+
+        # The second family's parents (Carl/Dora) must land under their own
+        # labeled "Parents: (family ...)" block, not directly inside the
+        # first family's Siblings: list with no header in between — that was
+        # the reported bug. Using "Carl"'s own index as a window boundary
+        # would be tautological (the window can never contain its own end
+        # marker); assert the family2 header itself appears between the two
+        # names instead, which only holds true when the blocks are separated.
+        sam_idx = result.index("Sam")
+        carl_idx = result.index("Carl")
+        assert sam_idx < carl_idx
+        between = result[sam_idx:carl_idx]
+        assert f"Parents: (family {family2['gramps_id']})" in between
+
+    @pytest.mark.asyncio
+    async def test_single_parent_family_label_unaffected(self, write_client):
+        db = write_client._db
+        father = _new_person(db, "Charlie", "Jones")
+        child = _new_person(db, "Dana", "Jones")
+        family = db.put("family", {
+            "father_handle": father["handle"], "child_handles": [child["handle"]],
+        })
+
+        result = await format_person_detail(write_client, "default", child["handle"])
+
+        assert f"Parents: (family {family['gramps_id']})" in result
