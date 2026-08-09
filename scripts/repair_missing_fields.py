@@ -435,6 +435,8 @@ def repair_family_secondary_columns(
             continue
         json_father = data.get("father_handle") or None
         json_mother = data.get("mother_handle") or None
+        col_father = col_father or None
+        col_mother = col_mother or None
         if col_father == json_father and col_mother == json_mother:
             continue
         fixed += 1
@@ -444,6 +446,65 @@ def repair_family_secondary_columns(
                 (json_father, json_mother, handle),
             )
     return len(rows), fixed
+
+
+def _repair_single_ref_column(
+    conn: sqlite3.Connection,
+    table: str,
+    column: str,
+    dry_run: bool,
+) -> Tuple[int, int]:
+    """
+    Fix a single reference-type secondary column that drifted from json_data.
+
+    Normalizes both sides with ``or None`` before comparing, matching the
+    convention ``_secondaries()`` uses on write — this treats Gramps
+    Desktop's native "" placeholder and a genuinely missing value as
+    equivalent, so rows never touched by our tool are never flagged.
+    """
+    rows = conn.execute(
+        f"SELECT handle, json_data, {column} FROM {table}"  # noqa: S608
+    ).fetchall()
+    fixed = 0
+    for handle, jdata, col_val in rows:
+        try:
+            data = json.loads(jdata)
+        except Exception as exc:
+            print(f"  WARN: {table}/{handle}: JSON parse error: {exc}")
+            continue
+        json_val = data.get(column) or None
+        col_val = col_val or None
+        if col_val == json_val:
+            continue
+        fixed += 1
+        if not dry_run:
+            conn.execute(
+                f"UPDATE {table} SET {column}=? WHERE handle=?",  # noqa: S608
+                (json_val, handle),
+            )
+    return len(rows), fixed
+
+
+def repair_event_secondary_columns(
+    conn: sqlite3.Connection,
+    dry_run: bool,
+) -> Tuple[int, int]:
+    """
+    Fix event.place columns that drifted from json_data.
+
+    Same root cause as repair_family_secondary_columns, but triggered far
+    more often in practice: merge/citation-linking tools frequently patch a
+    single unrelated field on an event, which used to blank/stale `place`.
+    """
+    return _repair_single_ref_column(conn, "event", "place", dry_run)
+
+
+def repair_citation_secondary_columns(
+    conn: sqlite3.Connection,
+    dry_run: bool,
+) -> Tuple[int, int]:
+    """Fix citation.source_handle columns that drifted from json_data."""
+    return _repair_single_ref_column(conn, "citation", "source_handle", dry_run)
 
 
 # ---------------------------------------------------------------------------
@@ -482,6 +543,14 @@ def main() -> None:
             scanned, fixed = repair_family_secondary_columns(conn, args.dry_run)
             status = "would fix" if args.dry_run else "fixed"
             print(f"  {'family.cols':12s}: scanned {scanned:5d}  {status} {fixed}")
+            total_fixed += fixed
+            scanned, fixed = repair_event_secondary_columns(conn, args.dry_run)
+            status = "would fix" if args.dry_run else "fixed"
+            print(f"  {'event.cols':12s}: scanned {scanned:5d}  {status} {fixed}")
+            total_fixed += fixed
+            scanned, fixed = repair_citation_secondary_columns(conn, args.dry_run)
+            status = "would fix" if args.dry_run else "fixed"
+            print(f"  {'citation.cols':12s}: scanned {scanned:5d}  {status} {fixed}")
             total_fixed += fixed
     finally:
         conn.close()
