@@ -97,6 +97,20 @@ class TestRepairFamilySecondaryColumns:
         assert scanned == 1
         assert fixed == 1
 
+    def test_native_empty_string_column_not_reported_as_fixed(self, conn):
+        # Defense in depth: normalize the column side too, matching
+        # _repair_single_ref_column's event/citation normalization, in case
+        # any writer ever stores "" instead of NULL for an unset parent.
+        _insert_family(
+            conn, "h_fam1", "F0001",
+            father_handle_col="", mother_handle_col=None,
+            json_father_handle="", json_mother_handle=None,
+        )
+
+        scanned, fixed = repair_family_secondary_columns(conn, dry_run=False)
+
+        assert fixed == 0
+
     def test_stale_mother_handle_column_fixed_from_json(self, conn):
         _insert_family(
             conn, "h_fam1", "F0001",

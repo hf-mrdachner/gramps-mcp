@@ -435,6 +435,8 @@ def repair_family_secondary_columns(
             continue
         json_father = data.get("father_handle") or None
         json_mother = data.get("mother_handle") or None
+        col_father = col_father or None
+        col_mother = col_mother or None
         if col_father == json_father and col_mother == json_mother:
             continue
         fixed += 1
