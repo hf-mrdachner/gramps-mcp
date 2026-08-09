@@ -410,6 +410,42 @@ def repair_person_secondary_columns(
     return len(rows), fixed
 
 
+def repair_family_secondary_columns(
+    conn: sqlite3.Connection,
+    dry_run: bool,
+) -> Tuple[int, int]:
+    """
+    Fix family.father_handle / family.mother_handle columns that drifted from json_data.
+
+    A partial put("family", ...) that omitted father_handle/mother_handle used
+    to blank or stale these secondary columns while json_data (the merged,
+    authoritative record) kept the correct value — see _secondaries() in
+    _gramps_sqlite.py, now fixed to read from the merged JSON on write. This
+    repairs rows written before that fix.
+    """
+    rows = conn.execute(
+        "SELECT handle, json_data, father_handle, mother_handle FROM family"  # noqa: S608
+    ).fetchall()
+    fixed = 0
+    for handle, jdata, col_father, col_mother in rows:
+        try:
+            data = json.loads(jdata)
+        except Exception as exc:
+            print(f"  WARN: family/{handle}: JSON parse error: {exc}")
+            continue
+        json_father = data.get("father_handle") or None
+        json_mother = data.get("mother_handle") or None
+        if col_father == json_father and col_mother == json_mother:
+            continue
+        fixed += 1
+        if not dry_run:
+            conn.execute(
+                "UPDATE family SET father_handle=?, mother_handle=? WHERE handle=?",  # noqa: S608
+                (json_father, json_mother, handle),
+            )
+    return len(rows), fixed
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -442,6 +478,10 @@ def main() -> None:
             scanned, fixed = repair_person_secondary_columns(conn, args.dry_run)
             status = "would fix" if args.dry_run else "fixed"
             print(f"  {'person.cols':12s}: scanned {scanned:5d}  {status} {fixed}")
+            total_fixed += fixed
+            scanned, fixed = repair_family_secondary_columns(conn, args.dry_run)
+            status = "would fix" if args.dry_run else "fixed"
+            print(f"  {'family.cols':12s}: scanned {scanned:5d}  {status} {fixed}")
             total_fixed += fixed
     finally:
         conn.close()

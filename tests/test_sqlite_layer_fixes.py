@@ -681,3 +681,63 @@ class TestWriteObjectRowcount:
                     "_class": "Person", "handle": "nonexistent_handle",
                     "event_ref_list": [],
                 })
+
+
+# ===========================================================================
+# Secondary column vs json_data divergence on partial update
+# ===========================================================================
+#
+# _secondaries() must build column values from the *merged* Gramps JSON, not
+# from the raw partial patch dict — otherwise a partial put() that omits a
+# field wipes that field's secondary column even though json_data correctly
+# retains the previous value (merged in by _build_gramps_json).
+
+class TestSecondaryColumnsSurvivePartialUpdate:
+    def test_family_father_mother_handle_columns_survive_partial_update(self, fresh_db):
+        db, conn = fresh_db
+        father = db.put("person", {"given_name": "John", "surname": "Smith"})
+        mother = db.put("person", {"given_name": "Jane", "surname": "Doe"})
+        family = db.put("family", {
+            "father_handle": father["handle"],
+            "mother_handle": mother["handle"],
+        })
+        family_handle = family["handle"]
+
+        # Partial update that does not mention father_handle/mother_handle at all.
+        db.put("family", {"handle": family_handle, "type": "Married"})
+
+        row = conn.execute(
+            "SELECT father_handle, mother_handle, json_data "
+            "FROM family WHERE handle = ?",
+            (family_handle,),
+        ).fetchone()
+        json_data = json.loads(row["json_data"])
+        assert row["father_handle"] == father["handle"]
+        assert row["father_handle"] == json_data.get("father_handle")
+        assert row["mother_handle"] == mother["handle"]
+        assert row["mother_handle"] == json_data.get("mother_handle")
+
+    def test_person_given_name_surname_columns_survive_partial_update(self, fresh_db):
+        db, conn = fresh_db
+        person = db.put("person", {
+            "primary_name": {
+                "first_name": "John",
+                "surname_list": [{"surname": "Smith"}],
+            },
+        })
+        person_handle = person["handle"]
+
+        # Partial update that does not mention primary_name at all.
+        db.put("person", {"handle": person_handle, "gender": 1})
+
+        row = conn.execute(
+            "SELECT given_name, surname, json_data FROM person WHERE handle = ?",
+            (person_handle,),
+        ).fetchone()
+        json_data = json.loads(row["json_data"])
+        pn = json_data.get("primary_name", {})
+        sl = pn.get("surname_list", [])
+        assert row["given_name"] == "John"
+        assert row["given_name"] == pn.get("first_name")
+        assert row["surname"] == "Smith"
+        assert row["surname"] == (sl[0].get("surname") if sl else "")

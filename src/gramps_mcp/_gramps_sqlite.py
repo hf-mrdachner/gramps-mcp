@@ -754,7 +754,7 @@ class GrampsSqliteDB(GrampsXmlDB):
 
         try:
             with self._conn:
-                secondaries = _secondaries(obj_type, obj)
+                secondaries = _secondaries(obj_type, gramps_json)
                 if existing_raw is None:
                     cols = ["handle", "json_data"] + list(secondaries.keys())
                     placeholders = ",".join("?" * len(cols))
@@ -1443,7 +1443,10 @@ def _secondaries(obj_type: str, obj: Dict) -> Dict[str, Any]:
 
     Args:
         obj_type: Object type string.
-        obj:      Normalised dict with at least ``gramps_id`` and ``change``.
+        obj:      The full merged Gramps JSON dict (``gramps_json`` from
+                  ``_build_gramps_json``), not the raw partial patch — a
+                  partial ``put()`` must not blank out columns for fields
+                  it didn't touch.
 
     Returns:
         Dict of column name → value for all secondary columns.
