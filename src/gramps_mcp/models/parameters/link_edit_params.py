@@ -305,6 +305,34 @@ class AddAlternateNameToPersonParams(BaseModel):
     )
 
 
+class RemoveAlternateNameFromPersonParams(BaseModel):
+    """Parameters for remove_alternate_name_from_person tool."""
+
+    person_handle: Optional[str] = Field(None, description="Handle of the person")
+    person_gramps_id: Optional[str] = Field(
+        None,
+        description=(
+            "Gramps ID of the person (e.g. 'I0001'). Alternative to person_handle."
+        ),
+    )
+    name: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Name object to match and remove from alternate_names by "
+            "(first_name, surname(s), type) identity, e.g. "
+            "{'first_name': 'Johanne', 'surname_list': [{'surname': 'Thamm'}], "
+            "'type': 'Also Known As'}. Mutually exclusive with index."
+        ),
+    )
+    index: Optional[int] = Field(
+        None,
+        description=(
+            "Position in alternate_names to remove (0-based). "
+            "Mutually exclusive with name."
+        ),
+    )
+
+
 class RemoveNoteFromFamilyParams(BaseModel):
     """Parameters for remove_note_from_family tool."""
 

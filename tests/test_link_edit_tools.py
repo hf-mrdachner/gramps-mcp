@@ -1227,3 +1227,224 @@ class TestAddAlternateNameToPerson:
                     db=db,
                 )
             )
+
+
+# ===========================================================================
+# remove_alternate_name_from_person
+# ===========================================================================
+
+class TestRemoveAlternateNameFromPerson:
+    def test_removes_by_name_identity(self, fresh_db):
+        from gramps_mcp.tools.link_edit import (
+            add_alternate_name_to_person_tool,
+            remove_alternate_name_from_person_tool,
+        )
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+        name = {
+            "first_name": "Johanne Auguste Henriette",
+            "surname_list": [{"surname": "Thamm"}],
+            "type": "Also Known As",
+        }
+        asyncio.run(
+            add_alternate_name_to_person_tool(person_handle="h_pe", name=name, db=db)
+        )
+
+        result = asyncio.run(
+            remove_alternate_name_from_person_tool(
+                person_handle="h_pe", name=name, db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+        assert data["alternate_name_count"] == 0
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = 'h_pe'"
+        ).fetchone()
+        person_data = json.loads(row["json_data"])
+        assert person_data.get("alternate_names", []) == []
+
+    def test_removes_by_index(self, fresh_db):
+        from gramps_mcp.tools.link_edit import (
+            add_alternate_name_to_person_tool,
+            remove_alternate_name_from_person_tool,
+        )
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+        asyncio.run(
+            add_alternate_name_to_person_tool(
+                person_handle="h_pe",
+                name={"first_name": "First", "surname_list": [{"surname": "Alt"}]},
+                db=db,
+            )
+        )
+        asyncio.run(
+            add_alternate_name_to_person_tool(
+                person_handle="h_pe",
+                name={"first_name": "Second", "surname_list": [{"surname": "Alt"}]},
+                db=db,
+            )
+        )
+
+        result = asyncio.run(
+            remove_alternate_name_from_person_tool(
+                person_handle="h_pe", index=0, db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+        assert data["alternate_name_count"] == 1
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = 'h_pe'"
+        ).fetchone()
+        person_data = json.loads(row["json_data"])
+        remaining = [n["first_name"] for n in person_data.get("alternate_names", [])]
+        assert remaining == ["Second"]
+
+    def test_primary_name_untouched(self, fresh_db):
+        from gramps_mcp.tools.link_edit import (
+            add_alternate_name_to_person_tool,
+            remove_alternate_name_from_person_tool,
+        )
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+        name = {"first_name": "Alt", "surname_list": [{"surname": "Name"}]}
+        asyncio.run(
+            add_alternate_name_to_person_tool(person_handle="h_pe", name=name, db=db)
+        )
+        asyncio.run(
+            remove_alternate_name_from_person_tool(
+                person_handle="h_pe", name=name, db=db
+            )
+        )
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = 'h_pe'"
+        ).fetchone()
+        person_data = json.loads(row["json_data"])
+        assert person_data["primary_name"]["first_name"] == "Test"
+
+    def test_only_matching_entry_removed_when_multiple_present(self, fresh_db):
+        from gramps_mcp.tools.link_edit import (
+            add_alternate_name_to_person_tool,
+            remove_alternate_name_from_person_tool,
+        )
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+        keep = {"first_name": "Keep", "surname_list": [{"surname": "Alt"}]}
+        remove = {"first_name": "Remove", "surname_list": [{"surname": "Alt"}]}
+        asyncio.run(
+            add_alternate_name_to_person_tool(person_handle="h_pe", name=keep, db=db)
+        )
+        asyncio.run(
+            add_alternate_name_to_person_tool(person_handle="h_pe", name=remove, db=db)
+        )
+
+        asyncio.run(
+            remove_alternate_name_from_person_tool(
+                person_handle="h_pe", name=remove, db=db
+            )
+        )
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = 'h_pe'"
+        ).fetchone()
+        person_data = json.loads(row["json_data"])
+        remaining = [n["first_name"] for n in person_data.get("alternate_names", [])]
+        assert remaining == ["Keep"]
+
+    def test_error_when_no_matching_name(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_alternate_name_from_person_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+
+        with pytest.raises(GrampsAPIError, match="No alternate name"):
+            asyncio.run(
+                remove_alternate_name_from_person_tool(
+                    person_handle="h_pe",
+                    name={"first_name": "Nope", "surname_list": [{"surname": "X"}]},
+                    db=db,
+                )
+            )
+
+    def test_error_when_index_out_of_range(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_alternate_name_from_person_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+
+        with pytest.raises(GrampsAPIError, match="out of range"):
+            asyncio.run(
+                remove_alternate_name_from_person_tool(
+                    person_handle="h_pe", index=0, db=db
+                )
+            )
+
+    def test_error_when_neither_name_nor_index(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_alternate_name_from_person_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+
+        with pytest.raises(GrampsAPIError, match="exactly one of"):
+            asyncio.run(
+                remove_alternate_name_from_person_tool(person_handle="h_pe", db=db)
+            )
+
+    def test_error_when_both_name_and_index(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_alternate_name_from_person_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+
+        with pytest.raises(GrampsAPIError, match="exactly one of"):
+            asyncio.run(
+                remove_alternate_name_from_person_tool(
+                    person_handle="h_pe",
+                    name={"first_name": "X", "surname_list": [{"surname": "Y"}]},
+                    index=0,
+                    db=db,
+                )
+            )
+
+    def test_remove_via_person_gramps_id(self, fresh_db):
+        from gramps_mcp.tools.link_edit import (
+            add_alternate_name_to_person_tool,
+            remove_alternate_name_from_person_tool,
+        )
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+        name = {"first_name": "X", "surname_list": [{"surname": "Y"}]}
+        asyncio.run(
+            add_alternate_name_to_person_tool(person_handle="h_pe", name=name, db=db)
+        )
+
+        result = asyncio.run(
+            remove_alternate_name_from_person_tool(
+                person_gramps_id="I0001", name=name, db=db
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["result"] == "ok"
+
+    def test_error_on_unknown_person_handle(self, fresh_db):
+        from gramps_mcp.tools.link_edit import remove_alternate_name_from_person_tool
+
+        db, conn = fresh_db
+
+        with pytest.raises(GrampsAPIError, match="Person.*not found"):
+            asyncio.run(
+                remove_alternate_name_from_person_tool(
+                    person_handle="nonexistent",
+                    name={"first_name": "X", "surname_list": [{"surname": "Y"}]},
+                    db=db,
+                )
+            )

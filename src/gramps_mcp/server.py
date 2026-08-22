@@ -45,6 +45,7 @@ from .models.parameters.link_edit_params import (
     AddNoteToFamilyParams,
     AddNoteToPersonParams,
     MoveAttachmentParams,
+    RemoveAlternateNameFromPersonParams,
     RemoveChildFromFamilyParams,
     RemoveCitationFromEventParams,
     RemoveEventFromFamilyParams,
@@ -107,6 +108,7 @@ from .tools.link_edit import (
     add_event_to_family_tool,
     add_event_to_person_tool,
     move_attachment_tool,
+    remove_alternate_name_from_person_tool,
     remove_child_from_family_tool,
     remove_event_from_family_tool,
     remove_event_from_person_tool,
@@ -418,6 +420,16 @@ async def _handle_add_alternate_name_to_person(args: Dict) -> Any:
         person_handle=args.get("person_handle"),
         person_gramps_id=args.get("person_gramps_id"),
         name=args.get("name"),
+    )
+
+
+async def _handle_remove_alternate_name_from_person(args: Dict) -> Any:
+    """Handler for remove_alternate_name_from_person."""
+    return await remove_alternate_name_from_person_tool(
+        person_handle=args.get("person_handle"),
+        person_gramps_id=args.get("person_gramps_id"),
+        name=args.get("name"),
+        index=args.get("index"),
     )
 
 
@@ -869,6 +881,17 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "schema": AddAlternateNameToPersonParams,
         "handler": _handle_add_alternate_name_to_person,
     },
+    "remove_alternate_name_from_person": {
+        "description": (
+            "Remove a Name object from a person's alternate_names. Symmetric with "
+            "add_alternate_name_to_person. Match by name (same first_name/surname(s)/"
+            "type identity used by add_alternate_name_to_person) or by index "
+            "(0-based position in alternate_names) — exactly one of the two is "
+            "required. Does not touch primary_name. SQLite backend only."
+        ),
+        "schema": RemoveAlternateNameFromPersonParams,
+        "handler": _handle_remove_alternate_name_from_person,
+    },
     "move_attachment": {
         "description": (
             "Move a note or media reference from one object to another atomically. "
@@ -931,6 +954,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "get_dna_matches",
         "update_dna_match",
         "add_alternate_name_to_person",
+        "remove_alternate_name_from_person",
         "add_note_to_person",
         "remove_note_from_person",
         "get_note",
