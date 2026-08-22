@@ -686,3 +686,93 @@ async def add_alternate_name_to_person_tool(
         },
         ensure_ascii=False,
     ))]
+
+
+# ---------------------------------------------------------------------------
+# Tool 6: remove_alternate_name_from_person
+# ---------------------------------------------------------------------------
+
+
+async def remove_alternate_name_from_person_tool(
+    person_handle: Optional[str] = None,
+    person_gramps_id: Optional[str] = None,
+    name: Optional[dict] = None,
+    index: Optional[int] = None,
+    db: Any = None,
+) -> List[TextContent]:
+    """
+    Remove a Name object from a person's alternate_names.
+
+    Symmetric with add_alternate_name_to_person. Exactly one of name/index
+    is required: name matches by the same (first_name, surname(s), type)
+    identity used by add_alternate_name_to_person's duplicate check; index
+    removes by position in alternate_names. Leaves primary_name and every
+    other field untouched. SQLite backend only.
+
+    Args:
+        person_handle: Handle of the person.
+        person_gramps_id: Gramps ID of the person (alternative to person_handle).
+        name: Name object dict to match by identity (mutually exclusive with index).
+        index: Position in alternate_names to remove (mutually exclusive with name).
+        db: GrampsSqliteDB instance (injected for tests; None uses get_client()).
+
+    Returns:
+        List[TextContent] with JSON result, person_handle, removed name,
+        alternate_name_count.
+
+    Raises:
+        GrampsAPIError: If backend is not SQLite, person not found, neither/both
+                        of name/index given, no matching name, or index out of range.
+    """
+    db = _require_sqlite_db(db, "remove_alternate_name_from_person")
+    conn = db._conn
+
+    if (name is None) == (index is None):
+        raise GrampsAPIError("exactly one of name or index is required")
+
+    person_handle = _resolve_handle(
+        conn, "person", person_handle, person_gramps_id, "Person"
+    )
+    person_data = _read_object(conn, "person", person_handle, "Person")
+    alternate_names = person_data.get("alternate_names", [])
+
+    if index is not None:
+        if index < 0 or index >= len(alternate_names):
+            raise GrampsAPIError(
+                f"index {index} out of range "
+                f"(person has {len(alternate_names)} alternate names)"
+            )
+        remove_at = index
+    else:
+        target_identity = _name_identity(_make_name(name))
+        matches = [
+            i
+            for i, n in enumerate(alternate_names)
+            if isinstance(n, dict) and _name_identity(n) == target_identity
+        ]
+        if not matches:
+            raise GrampsAPIError(
+                "No alternate name matching this first_name/surname(s)/type "
+                "was found on this person"
+            )
+        remove_at = matches[0]
+
+    removed = alternate_names[remove_at]
+    new_names = alternate_names[:remove_at] + alternate_names[remove_at + 1 :]
+    person_data["alternate_names"] = new_names
+
+    with conn:
+        _write_person(conn, person_handle, person_data)
+
+    return [TextContent(type="text", text=json.dumps(
+        {
+            "result": "ok",
+            "person_handle": person_handle,
+            "removed": {
+                "first_name": removed.get("first_name", ""),
+                "surname_list": removed.get("surname_list", []),
+            },
+            "alternate_name_count": len(new_names),
+        },
+        ensure_ascii=False,
+    ))]
