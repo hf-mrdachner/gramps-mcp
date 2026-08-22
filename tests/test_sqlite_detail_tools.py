@@ -136,10 +136,12 @@ class TestGetEventTool:
     @pytest.mark.asyncio
     async def test_family_event_listed(self, write_client):
         from gramps_mcp.tools.search_details import get_event_tool
-        # E0004 = marriage event — attached to family h_fa_smith, not a person
+        # E0004 = marriage event — attached only via family h_fa_smith's
+        # event_ref_list, not duplicated onto either spouse's event_ref_list.
         result = await get_event_tool.__wrapped__(write_client, {"gramps_id": "E0004"})
         text = _result_text(result)
-        assert "E0004" in text
+        assert "Keine Person gefunden" not in text
+        assert "F0001" in text
 
 
 # ---------------------------------------------------------------------------
