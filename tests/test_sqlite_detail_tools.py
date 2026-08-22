@@ -440,6 +440,32 @@ class TestMergePlacesTool:
         )
         assert "nicht gefunden" in _result_text(result)
 
+    @pytest.mark.asyncio
+    async def test_write_does_not_adopt_loser_placeref(self, write_client):
+        # Loser (P0002/Hamburg) has a placeref_list pointing at h_pl_germany;
+        # winner (P0001/Berlin) has none. The loser's possibly-wrong parent
+        # link must NOT be silently adopted by the winner (issue #51).
+        from gramps_mcp.tools.search_details import merge_places_tool
+        await merge_places_tool.__wrapped__(
+            write_client, {"winner_id": "P0001", "loser_id": "P0002", "dry_run": False}
+        )
+        row = write_client._db._conn.execute(
+            "SELECT json_data FROM place WHERE handle='h_pl_berlin'"
+        ).fetchone()
+        winner_data = json.loads(row["json_data"])
+        assert winner_data.get("placeref_list", []) == []
+
+    @pytest.mark.asyncio
+    async def test_dry_run_warns_about_loser_placeref_not_transferred(
+        self, write_client
+    ):
+        from gramps_mcp.tools.search_details import merge_places_tool
+        result = await merge_places_tool.__wrapped__(
+            write_client, {"winner_id": "P0001", "loser_id": "P0002", "dry_run": True}
+        )
+        text = _result_text(result)
+        assert "wird NICHT übernommen" in text
+
 
 # ---------------------------------------------------------------------------
 # merge_events_tool (dry_run + write, including family event_ref_list)

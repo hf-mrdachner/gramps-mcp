@@ -535,22 +535,22 @@ async def merge_places_tool(client, arguments: Dict) -> List[TextContent]:
             )
         ]
 
-        # Transfer loser's placeref_list to winner if winner has none
+        # The loser's placeref_list (parent-place link) is deliberately NOT
+        # transferred to the winner, even if the winner has none — a
+        # duplicate "loser" place with bad hierarchy data is exactly the
+        # kind of place that gets merged away, so its parent link is not
+        # trustworthy just because the winner's is empty (issue #51).
         loser_placrefs = loser.get("placeref_list", [])
-        winner_placrefs = winner.get("placeref_list", [])
-        transfer_placrefs = (
-            loser_placrefs if loser_placrefs and not winner_placrefs else []
-        )
 
         prefix = "[DRY RUN] " if dry_run else ""
         lines = [
             f"{prefix}merge_places: {loser_name} ({loser_id}) → {winner_name} ({winner_id})",
             f"{len(affected_events)} Events, {len(affected_child_places)} untergeordnete Orte betroffen",
         ]
-        if transfer_placrefs:
-            planned = "[PLANNED] " if dry_run else ""
+        if loser_placrefs:
             lines.append(
-                f"{planned}Übergeordnete Orte vom Loser übernommen: {len(transfer_placrefs)}"
+                f"Loser hatte {len(loser_placrefs)} übergeordnete(n) Ort(e) — "
+                "wird NICHT übernommen (ggf. manuell auf dem Winner setzen)."
             )
         lines.append("")
 
@@ -588,17 +588,6 @@ async def merge_places_tool(client, arguments: Dict) -> List[TextContent]:
                     tree_id=tree_id,
                     handle=place["handle"],
                     params={"handle": place["handle"], "placeref_list": new_refs},
-                )
-            # Transfer parent hierarchy if winner has none
-            if transfer_placrefs:
-                await client.make_api_call(
-                    ApiCalls.PUT_PLACE,
-                    tree_id=tree_id,
-                    handle=winner_handle,
-                    params={
-                        "handle": winner_handle,
-                        "placeref_list": transfer_placrefs,
-                    },
                 )
             # Delete loser
             await client.make_api_call(
