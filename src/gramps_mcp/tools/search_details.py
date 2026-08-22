@@ -138,9 +138,12 @@ async def get_event_tool(client, arguments: Dict) -> List[TextContent]:
             except Exception:
                 lines.append(f"* Citation: [broken ref {ch[:16]}]")
 
-        # Find persons — scan all, GQL cannot search inside arrays
+        # Find persons/families — scan all, GQL cannot search inside arrays
         all_persons = await client.make_api_call(
             ApiCalls.GET_PEOPLE, tree_id=tree_id, params={"pagesize": 99999}
+        )
+        all_families = await client.make_api_call(
+            ApiCalls.GET_FAMILIES, tree_id=tree_id, params={"pagesize": 99999}
         )
 
         lines.append("")
@@ -162,6 +165,17 @@ async def get_event_tool(client, arguments: Dict) -> List[TextContent]:
                     name = f"{given} {surname}".strip() or "?"
                     pid = person.get("gramps_id", "")
                     found.append(f"* {name} ({pid}) — {role}")
+                    break
+
+        for family in all_families:
+            for ref in family.get("event_ref_list", []):
+                ref_handle = ref.get("ref", "") if isinstance(ref, dict) else ref
+                if ref_handle == handle:
+                    role = (
+                        ref.get("role", "Family") if isinstance(ref, dict) else "Family"
+                    )
+                    fid = family.get("gramps_id", "")
+                    found.append(f"* Familie {fid} — {role}")
                     break
 
         if found:
