@@ -147,7 +147,7 @@ async def get_event_tool(client, arguments: Dict) -> List[TextContent]:
         )
 
         lines.append("")
-        lines.append("**Personen mit diesem Event:**")
+        lines.append("**Personen/Familien mit diesem Event:**")
         found = []
         for person in all_persons:
             for ref in person.get("event_ref_list", []):
