@@ -1359,6 +1359,48 @@ class TestRemoveAlternateNameFromPerson:
         remaining = [n["first_name"] for n in person_data.get("alternate_names", [])]
         assert remaining == ["Keep"]
 
+    def test_removes_only_one_of_true_identity_duplicates(self, fresh_db):
+        # add_alternate_name_to_person's own dedup prevents this via the tool,
+        # but data written out-of-band (e.g. direct SQLite, a GEDCOM import)
+        # can still end up with two alternate_names sharing the same
+        # (first_name, surname(s), type) identity. Removing by name must only
+        # drop one entry, not both.
+        from gramps_mcp.tools.link_edit import remove_alternate_name_from_person_tool
+
+        db, conn = fresh_db
+        _insert_person(conn, "h_pe", "I0001")
+        dup_name = {
+            "_class": "Name", "first_name": "Johanne",
+            "surname_list": [{"_class": "Surname", "surname": "Thamm"}],
+            "type": {"_class": "NameType", "value": 2, "string": ""},
+        }
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = 'h_pe'"
+        ).fetchone()
+        person_data = json.loads(row["json_data"])
+        person_data["alternate_names"] = [dup_name, dup_name]
+        conn.execute(
+            "UPDATE person SET json_data=? WHERE handle='h_pe'",
+            [json.dumps(person_data)],
+        )
+        conn.commit()
+
+        result = asyncio.run(
+            remove_alternate_name_from_person_tool(
+                person_handle="h_pe",
+                name={"first_name": "Johanne", "surname_list": [{"surname": "Thamm"}]},
+                db=db,
+            )
+        )
+        data = json.loads(result[0].text)
+        assert data["alternate_name_count"] == 1
+
+        row = conn.execute(
+            "SELECT json_data FROM person WHERE handle = 'h_pe'"
+        ).fetchone()
+        person_data = json.loads(row["json_data"])
+        assert len(person_data.get("alternate_names", [])) == 1
+
     def test_error_when_no_matching_name(self, fresh_db):
         from gramps_mcp.tools.link_edit import remove_alternate_name_from_person_tool
 
