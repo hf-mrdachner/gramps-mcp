@@ -285,7 +285,9 @@ def _denorm_date(d: Any) -> Dict:
         "modifier": modifier,
         "quality": d.get("quality", 0),
         "dateval": _safe_dateval(d.get("dateval"), modifier),
-        "text": d.get("string", ""),
+        # Reason: callers use "string", but stored Gramps JSON uses "text". Reading only
+        # "string" blanked the text whenever an already-denormalised date passed through.
+        "text": d.get("string") or d.get("text", ""),
         "sortval": d.get("sortval", 0),
         "newyear": d.get("newyear", 0),
         "format": d.get("format"),

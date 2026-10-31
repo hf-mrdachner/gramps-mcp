@@ -66,7 +66,9 @@ class PlaceSaveParams(BaseModel):
         None,
         description=(
             "Alternative names; replaces the existing list. Each entry is a plain "
-            "string or a place name object with 'value' and optional 'lang'/'date'"
+            "string or a place name object with 'value' and optional 'lang' and "
+            "'date'. 'date' is an object with dateval array [day, month, year, "
+            "False], quality and modifier, as on an event date"
         ),
     )
     lat: Optional[str] = Field(None, description="Latitude coordinate")
@@ -93,16 +95,24 @@ class PlaceSaveParams(BaseModel):
 
         Returns:
             Optional[List[dict]]: One PlaceName dict per name, or None if omitted.
+
+        Raises:
+            ValueError: If a name has no non-empty string value, or its date is
+                not an object.
         """
         # Reason: the Web backend sends model_dump() unchanged, so this is the only
         # place that normalises for it. The SQLite backend completes date/lang later.
         if value is None:
             return None
-        return [
-            (
-                {"_class": "PlaceName", "value": n}
-                if isinstance(n, str)
-                else {"_class": "PlaceName", **n}
-            )
-            for n in value
-        ]
+        names = []
+        for entry in value:
+            name = {"value": entry} if isinstance(entry, str) else entry
+            text = name.get("value")
+            if not isinstance(text, str) or not text.strip():
+                raise ValueError(f"needs a non-empty string value: {entry!r}")
+            # Reason: _denorm_date turns a non-dict into an empty date, so a string
+            # date would be lost while the tool still reported success.
+            if "date" in name and not isinstance(name["date"], dict):
+                raise ValueError(f"date must be an object: {entry!r}")
+            names.append({**name, "_class": "PlaceName"})
+        return names

@@ -9,9 +9,10 @@ causing KeyError: '_class' when opening the Pedigree/Diagram view.
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from conftest_sqlite import _make_in_memory_db
-from gramps_mcp._gramps_sqlite import GrampsSqliteDB, _build_gramps_json
+from gramps_mcp._gramps_sqlite import GrampsSqliteDB, _build_gramps_json, _denorm_date
 from gramps_mcp.models.api_calls import ApiCalls
 from gramps_mcp.models.parameters.place_params import PlaceSaveParams
 from gramps_mcp.sqlite_client import GrampsSqliteClient
@@ -193,6 +194,55 @@ class TestAltNamesParams:
 
     def test_omitted_stays_none(self):
         assert PlaceSaveParams(place_type="Village").alt_names is None
+
+    def test_caller_class_cannot_override_place_name(self):
+        params = PlaceSaveParams(
+            place_type="Village", alt_names=[{"_class": "Location", "value": "Foo"}]
+        )
+        assert params.alt_names[0]["_class"] == "PlaceName"
+
+    @pytest.mark.parametrize(
+        "bad_entry",
+        ["", "   ", {"lang": "de"}, {"value": ""}, {"value": None}, {"value": 123}],
+    )
+    def test_invalid_value_rejected(self, bad_entry):
+        with pytest.raises(ValidationError, match="alt_names"):
+            PlaceSaveParams(place_type="Village", alt_names=[bad_entry])
+
+    def test_non_dict_date_rejected(self):
+        """A string date would otherwise be stored as an empty date, reporting success."""
+        with pytest.raises(ValidationError, match="date"):
+            PlaceSaveParams(
+                place_type="Village", alt_names=[{"value": "Foo", "date": "1900"}]
+            )
+
+    def test_validation_is_idempotent(self):
+        """FastMCP validates once and validate_api_call_params rebuilds the model."""
+        first = PlaceSaveParams(place_type="Village", alt_names=["Foo"])
+        second = PlaceSaveParams(**first.model_dump(exclude_none=True))
+        assert second.alt_names == first.alt_names
+
+
+class TestAltNameDateText:
+    """Both date text spellings must survive: 'string' (input) and 'text' (Gramps JSON)."""
+
+    def test_date_text_key_survives(self):
+        result = _build_place({"alt_names": [{
+            "value": "Foo", "date": {"dateval": [0, 0, 1700, False], "text": "um 1700"},
+        }]})
+        assert result["alt_names"][0]["date"]["text"] == "um 1700"
+
+    def test_date_string_key_survives(self):
+        result = _build_place({"alt_names": [{
+            "value": "Foo", "date": {"dateval": [0, 0, 1700, False], "string": "um 1700"},
+        }]})
+        assert result["alt_names"][0]["date"]["text"] == "um 1700"
+
+    def test_already_denormalised_date_is_unchanged(self):
+        date = {"dateval": [0, 0, 1700, False], "text": "um 1700", "calendar": 1}
+        once = _denorm_date(date)
+        assert once["text"] == "um 1700"
+        assert _denorm_date(once) == once
 
 
 class TestAltNamesRoundTrip:
