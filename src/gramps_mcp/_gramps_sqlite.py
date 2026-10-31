@@ -1131,7 +1131,9 @@ def _denorm_url(url: Any) -> Any:
 
 
 def _denorm_place_name(name: Any) -> Any:
-    """Denormalise a place name dict back to Gramps JSON PlaceName format."""
+    """Denormalise a place name (dict or plain string) to Gramps JSON PlaceName format."""
+    if isinstance(name, str):
+        name = {"value": name}
     if not isinstance(name, dict):
         return name
     return {
@@ -1289,6 +1291,8 @@ def _merge_into(base: Dict, patch: Dict, obj_type: str) -> None:
                     base["title"] = new_val
         elif obj_type == "place" and key == "placeref_list" and isinstance(val, list):
             base[gramps_key] = [_denorm_place_ref(r) for r in val]
+        elif obj_type == "place" and key == "alt_names" and isinstance(val, list):
+            base[gramps_key] = [_denorm_place_name(n) for n in val]
         elif key == "urls" and isinstance(val, list):
             base[gramps_key] = [_denorm_url(u) for u in val]
         elif key == "reporef_list" and isinstance(val, list):

@@ -25,9 +25,9 @@ API calls supported in this category:
 - DELETE_PLACE: Delete the place
 """
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .base_params import BaseGetMultipleParams, BaseGetSingleParams
 
@@ -62,7 +62,13 @@ class PlaceSaveParams(BaseModel):
     placeref_list: Optional[List[dict]] = Field(
         None, description="List of place references"
     )
-    alt_names: Optional[List[str]] = Field(None, description="Alternative names")
+    alt_names: Optional[List[Union[str, dict]]] = Field(
+        None,
+        description=(
+            "Alternative names; replaces the existing list. Each entry is a plain "
+            "string or a place name object with 'value' and optional 'lang'/'date'"
+        ),
+    )
     lat: Optional[str] = Field(None, description="Latitude coordinate")
     long: Optional[str] = Field(None, description="Longitude coordinate")
     urls: Optional[List[dict]] = Field(None, description="Associated URLs")
@@ -73,3 +79,30 @@ class PlaceSaveParams(BaseModel):
     note_list: Optional[List[str]] = Field(None, description="List of note handles")
     tag_list: Optional[List[str]] = Field(None, description="List of tag handles")
     private: Optional[bool] = Field(None, description="Mark as private")
+
+    @field_validator("alt_names")
+    @classmethod
+    def _wrap_alt_names(
+        cls, value: Optional[List[Union[str, dict]]]
+    ) -> Optional[List[dict]]:
+        """
+        Convert alternate names to PlaceName objects.
+
+        Args:
+            value (Optional[List[Union[str, dict]]]): Names as given by the caller.
+
+        Returns:
+            Optional[List[dict]]: One PlaceName dict per name, or None if omitted.
+        """
+        # Reason: the Web backend sends model_dump() unchanged, so this is the only
+        # place that normalises for it. The SQLite backend completes date/lang later.
+        if value is None:
+            return None
+        return [
+            (
+                {"_class": "PlaceName", "value": n}
+                if isinstance(n, str)
+                else {"_class": "PlaceName", **n}
+            )
+            for n in value
+        ]

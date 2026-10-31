@@ -6,7 +6,15 @@ PlaceName without the _class key required by Gramps's JSON deserializer,
 causing KeyError: '_class' when opening the Pedigree/Diagram view.
 """
 
-from gramps_mcp._gramps_sqlite import _build_gramps_json
+import json
+
+import pytest
+
+from conftest_sqlite import _make_in_memory_db
+from gramps_mcp._gramps_sqlite import GrampsSqliteDB, _build_gramps_json
+from gramps_mcp.models.api_calls import ApiCalls
+from gramps_mcp.models.parameters.place_params import PlaceSaveParams
+from gramps_mcp.sqlite_client import GrampsSqliteClient
 
 
 def _build_place(obj):
@@ -127,3 +135,90 @@ class TestPlaceNameJson:
         assert name.get("_class") == "PlaceName"
         date = name.get("date", {})
         assert date.get("_class") == "Date", f"Template PlaceName.date missing _class: {date}"
+
+
+class TestAltNamesJson:
+    """Regression tests for issue #57: alt_names stored as raw strings."""
+
+    def test_strings_become_place_names(self):
+        result = _build_place({"alt_names": ["Foo", "Bar"]})
+        assert [n["value"] for n in result["alt_names"]] == ["Foo", "Bar"]
+        for name in result["alt_names"]:
+            assert name["_class"] == "PlaceName"
+            assert name["date"]["_class"] == "Date"
+            assert name["lang"] == ""
+
+    def test_dict_entry_keeps_lang_and_date(self):
+        result = _build_place({"alt_names": [{
+            "value": "Neuencamp",
+            "lang": "de",
+            "date": {"dateval": [1, 1, 1900, False], "modifier": 0, "quality": 0, "string": ""},
+        }]})
+        name = result["alt_names"][0]
+        assert name["_class"] == "PlaceName"
+        assert name["value"] == "Neuencamp"
+        assert name["lang"] == "de"
+        assert name["date"]["dateval"] == [1, 1, 1900, False]
+
+    def test_mixed_strings_and_dicts(self):
+        result = _build_place({"alt_names": ["Foo", {"value": "Bar", "lang": "pl"}]})
+        assert [n["_class"] for n in result["alt_names"]] == ["PlaceName", "PlaceName"]
+        assert [n["lang"] for n in result["alt_names"]] == ["", "pl"]
+
+    def test_empty_list_clears_alt_names(self):
+        existing = _build_place({"alt_names": ["Foo"]})
+        result = _build_gramps_json("place", {"handle": "h_test", "alt_names": []}, existing)
+        assert result["alt_names"] == []
+
+    def test_update_without_alt_names_keeps_existing(self):
+        existing = _build_place({"alt_names": [{"value": "Foo", "lang": "de"}]})
+        result = _build_gramps_json("place", {"handle": "h_test", "lat": "1.0"}, existing)
+        assert result["alt_names"] == existing["alt_names"]
+
+
+class TestAltNamesParams:
+    """The Web backend sends model_dump() as-is, so the model must normalise too."""
+
+    def test_string_dumped_as_place_name(self):
+        params = PlaceSaveParams(place_type="Village", alt_names=["Foo"])
+        assert params.model_dump(exclude_none=True)["alt_names"] == [
+            {"_class": "PlaceName", "value": "Foo"}
+        ]
+
+    def test_dict_entry_accepted_and_keeps_fields(self):
+        params = PlaceSaveParams(
+            place_type="Village", alt_names=[{"value": "Foo", "lang": "de"}]
+        )
+        assert params.alt_names == [{"_class": "PlaceName", "value": "Foo", "lang": "de"}]
+
+    def test_omitted_stays_none(self):
+        assert PlaceSaveParams(place_type="Village").alt_names is None
+
+
+class TestAltNamesRoundTrip:
+    @pytest.mark.asyncio
+    async def test_put_place_persists_place_name_objects(self):
+        """Issue #57 repro: the update call must store objects in json_data."""
+        # Reason: the shared sqlite_client fixture is session-scoped, so a write
+        # through it would leak into other tests. This DB is private to the test.
+        conn = _make_in_memory_db()
+        client = object.__new__(GrampsSqliteClient)
+        client._db = GrampsSqliteDB(conn=conn, db_path=":memory:", read_only=False)
+        client._db_path = ":memory:"
+        client._report_cache = {}
+
+        await client.make_api_call(
+            ApiCalls.PUT_PLACE,
+            params=PlaceSaveParams(
+                handle="h_pl_berlin", place_type="City", alt_names=["Foo", "Bar"]
+            ),
+            handle="h_pl_berlin",
+        )
+
+        row = conn.execute(
+            "SELECT json_data FROM place WHERE handle = ?", ("h_pl_berlin",)
+        ).fetchone()
+        stored = json.loads(row[0])["alt_names"]
+        assert [n["value"] for n in stored] == ["Foo", "Bar"]
+        assert all(n["_class"] == "PlaceName" for n in stored)
+        assert all(n["date"]["_class"] == "Date" for n in stored)
