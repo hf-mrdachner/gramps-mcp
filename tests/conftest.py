@@ -313,6 +313,24 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_web)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def isolated_environment():
+    """
+    Keep a developer's Gramps configuration away from the tests.
+
+    Reason: some tests that don't use ``live_backend`` still build a client from
+    the environment, and would log in to a configured real instance. Runs after
+    collection, so it also covers what the test modules' load_dotenv() added.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        patch.delenv("GRAMPS_DB_PATH", raising=False)
+        patch.delenv("GRAMPS_PRIVACY_MODE", raising=False)
+        if not web_backend_enabled():
+            for name in ("GRAMPS_API_URL", "GRAMPS_USERNAME", "GRAMPS_PASSWORD"):
+                patch.delenv(name, raising=False)
+        yield
+
+
 def _reset_client_singletons() -> None:
     """
     Drop the cached backend client so the next get_client() re-reads the env.

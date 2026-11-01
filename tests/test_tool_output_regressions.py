@@ -9,6 +9,7 @@ import re
 
 import pytest
 
+from src.gramps_mcp.models.parameters.simple_params import SimpleGetParams
 from src.gramps_mcp.tools.data_management import create_person_tool, create_place_tool
 from src.gramps_mcp.tools.search_details import get_type_tool
 
@@ -54,6 +55,13 @@ class TestPlaceHierarchyOutput:
 
         assert "Cycle One, Cycle Two" in text
         assert text.count("Cycle One") == 1
+
+    async def test_broken_parent_link_keeps_the_known_names(self):
+        """A parent handle that does not exist must not hide the place itself."""
+        text = await _create_place("Broken Link Town", parent="f" * 32)
+
+        assert "Error formatting place" not in text
+        assert "Broken Link Town" in text
 
 
 class TestUrlDescriptionOutput:
@@ -115,3 +123,29 @@ class TestGetTypeErrors:
         text = result[0].text
         assert "not yet implemented" not in text
         assert "handle or gramps_id" in text
+
+    async def test_error_names_the_type_when_called_like_the_server(self):
+        """The server passes validated params, where ``type`` is an enum."""
+        arguments = SimpleGetParams(type="family", gramps_id="F9999").model_dump()
+
+        result = await get_type_tool(arguments)
+
+        assert "family with gramps_id 'F9999' not found" in result[0].text
+
+    async def test_brackets_in_a_name_are_not_taken_for_the_handle(self):
+        """Genealogy placeholders like ``[Unknown]`` can appear in names."""
+        created = await create_person_tool(
+            {
+                "primary_name": {
+                    "first_name": "[Unknown]",
+                    "surname_list": [{"surname": "Bracket"}],
+                },
+                "gender": 1,
+            }
+        )
+        gramps_id = re.search(r"- (I\d+) - \[", created[0].text).group(1)
+
+        result = await get_type_tool({"type": "person", "gramps_id": gramps_id})
+
+        assert "not found" not in result[0].text
+        assert gramps_id in result[0].text

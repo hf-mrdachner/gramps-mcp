@@ -100,9 +100,13 @@ def mcp_server(live_backend, tmp_path_factory):
             _wait_until_healthy(process, log_path)
             yield
         finally:
-            process.terminate()
-            process.wait(timeout=10)
             BASE_URL = original_base_url
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
 
 
 class TestServerBuild:

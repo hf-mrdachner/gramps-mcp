@@ -1289,6 +1289,8 @@ async def find_duplicate_events_tool(client, arguments: Dict) -> List[TextConten
 async def get_type_tool(arguments: Dict) -> List[TextContent]:
     """Universal get tool for person and family details."""
     entity_type = arguments.get("type")
+    # Reason: the server passes validated params, where type is an enum.
+    entity_type = getattr(entity_type, "value", entity_type)
     handle = arguments.get("handle")
     gramps_id = arguments.get("gramps_id")
 
@@ -1312,7 +1314,8 @@ async def get_type_tool(arguments: Dict) -> List[TextContent]:
 
         import re
 
-        handle_match = re.search(r"\[([^\]]+)\]", search_text)
+        # Reason: the handle ends its result line; names can contain brackets too.
+        handle_match = re.search(r"\[([^\]]+)\]\s*$", search_text, re.MULTILINE)
         if not handle_match:
             return [
                 TextContent(

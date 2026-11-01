@@ -22,6 +22,7 @@ Provides clean, direct formatting of place data from handles.
 
 import logging
 
+from ..client import GrampsAPIError
 from ..models.api_calls import ApiCalls
 from .url_utils import url_description
 
@@ -117,9 +118,15 @@ async def _build_place_hierarchy(client, tree_id: str, place_data: dict) -> str:
             break
         visited.add(parent_handle)
 
-        parent_data = await client.make_api_call(
-            api_call=ApiCalls.GET_PLACE, tree_id=tree_id, handle=parent_handle
-        )
+        # Reason: a broken parent link must not hide the names already known,
+        # and this walk now runs for every place whose title is just its name.
+        try:
+            parent_data = await client.make_api_call(
+                api_call=ApiCalls.GET_PLACE, tree_id=tree_id, handle=parent_handle
+            )
+        except GrampsAPIError as e:
+            logger.debug(f"Stopped place hierarchy at {parent_handle}: {e}")
+            break
         if not parent_data:
             break
 
