@@ -148,7 +148,7 @@ GRAMPS_TREE_ID=your-tree-id  # System Information in Gramps Web
 
 **Direct SQLite backend** (read/write, no server required — points at the live DB):
 ```bash
-GRAMPS_DB_PATH=/path/to/grampsdb/6a1764f8/sqlite.db
+GRAMPS_DB_PATH=/path/to/grampsdb/<tree-id>/sqlite.db
 ```
 
 **Direct XML backend** (read-only, no Gramps installation required):

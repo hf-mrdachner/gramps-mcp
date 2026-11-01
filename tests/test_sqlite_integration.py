@@ -10,7 +10,6 @@ These tests run against your actual Gramps SQLite database to verify that:
 Database priority:
   1. GRAMPS_TEST_DB_PATH env var (explicit override)
   2. tests/fixtures/test_gramps.sqlite (anonymized, committed to repo)
-  3. Default real DB path (developer machine only)
 
 Run with:
     uv run pytest tests/test_sqlite_integration.py -v -m integration
@@ -30,18 +29,10 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _ANON_DB = Path(__file__).parent / "fixtures" / "test_gramps.sqlite"
-_REAL_DB = (
-    r"C:\Users\dachner\AppData\Roaming\gramps\grampsdb\6a1764f8\sqlite.db"
-)
 
 
 def _find_db() -> str:
-    explicit = os.environ.get("GRAMPS_TEST_DB_PATH")
-    if explicit:
-        return explicit
-    if _ANON_DB.exists():
-        return str(_ANON_DB)
-    return _REAL_DB
+    return os.environ.get("GRAMPS_TEST_DB_PATH") or str(_ANON_DB)
 
 
 REAL_DB = _find_db()
@@ -65,12 +56,19 @@ skip_if_no_db = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
-def real_client():
-    """GrampsSqliteClient connected to the real Gramps database."""
+def real_client(tmp_path_factory):
+    """
+    GrampsSqliteClient connected to a copy of the test database.
+
+    Reason: opening a database switches it to WAL mode for good, which would
+    modify the committed fixture and leave -shm/-wal files next to it.
+    """
     if not _db_available():
         pytest.skip(f"Real DB not found: {REAL_DB}")
     from gramps_mcp.sqlite_client import GrampsSqliteClient
-    return GrampsSqliteClient(REAL_DB)
+    copy = tmp_path_factory.mktemp("integration_db") / "sqlite.db"
+    shutil.copy(REAL_DB, copy)
+    return GrampsSqliteClient(str(copy))
 
 
 @pytest.fixture(scope="module")
