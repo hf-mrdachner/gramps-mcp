@@ -7,7 +7,7 @@ mirroring repair_person_secondary_columns for person.surname/given_name.
 
 repair_event_secondary_columns / repair_citation_secondary_columns extend the
 same fix to event.place and citation.source_handle, which turned out to have
-the identical divergence at much larger scale on the live "Konsolidiert" DB
+the identical divergence at much larger scale on a real database
 (event.place: ~63% of rows) — same root cause (_secondaries() previously read
 the raw patch instead of the merged JSON), just triggered far more often by
 merge/citation-linking tools that only touch one field at a time.

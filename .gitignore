@@ -12,3 +12,24 @@ PR_DRAFT.md
 .claude/
 src/gramps_mcp.egg-info/
 .superpowers/
+
+# Family-tree data never belongs in this repository, not even anonymized.
+# Tests generate fictional data at run time (tests/synthetic_tree.py).
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+*.gpkg
+*.gramps
+*.ged
+*.gedcom
+*.sqlite3-shm
+*.sqlite3-wal
+*-journal
+*.gramps.gz
+*.gpkg.bak
+*.db.bak
+*.sqlite.bak

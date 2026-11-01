@@ -6,7 +6,7 @@
 
 **Architecture:** A new `gramps_id.py` module provides `resolve_handle(gramps_id, obj_type, client)` and `resolve_handles(arguments, handle_map, client)`. Tools call `resolve_handles` at their entry point; the function routes to `db.get_by_id()` for SQLite/Direct backends or a list-endpoint API call for the web backend. Parameter models gain optional `gramps_id` fields so the AI schema exposes them.
 
-**Tech Stack:** Python, Pydantic, pytest (asyncio_mode=auto), existing SQLite in-memory fixture. Working dir: `C:\Users\dachner\Documents\Privat\dev\gramps-mcp`.
+**Tech Stack:** Python, Pydantic, pytest (asyncio_mode=auto), existing SQLite in-memory fixture.
 
 ---
 
