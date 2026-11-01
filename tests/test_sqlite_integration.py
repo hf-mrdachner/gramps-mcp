@@ -1,62 +1,64 @@
 """
-Integration tests for GrampsSqliteClient against a real Gramps database.
+Integration tests for GrampsSqliteClient against a complete Gramps database file.
 
-These tests run against your actual Gramps SQLite database to verify that:
-  1. _load_sqlite() correctly opens and parses a real database
+These tests verify that:
+  1. _load_sqlite() correctly opens and parses a database file
   2. _normalize() produces the dict shape our handlers expect
   3. Type mappings are correct (EventType values, FamilyRelType, etc.)
   4. All structural invariants hold across every object in the database
 
-Database priority:
-  1. GRAMPS_TEST_DB_PATH env var (explicit override)
-  2. tests/fixtures/test_gramps.sqlite (anonymized, committed to repo)
-  3. Default real DB path (developer machine only)
+Database used:
+  - By default, a fictional tree generated at test time (tests/synthetic_tree.py).
+    No database file is ever committed to this repository.
+  - With GRAMPS_TEST_DB_PATH set, a temporary copy of that database. This catches
+    what invented data cannot, so run it against a real tree before a release.
 
 Run with:
     uv run pytest tests/test_sqlite_integration.py -v -m integration
 
-Run against real DB:
+Run against a copy of your own database (close Gramps first):
     GRAMPS_TEST_DB_PATH=C:/path/to/sqlite.db uv run pytest -m integration
 """
 
 import os
 import shutil
-from pathlib import Path
 
 import pytest
 
+from synthetic_tree import write_synthetic_tree
+
 # ---------------------------------------------------------------------------
-# Database path resolution
+# Database selection
 # ---------------------------------------------------------------------------
 
-_ANON_DB = Path(__file__).parent / "fixtures" / "test_gramps.sqlite"
-_REAL_DB = (
-    r"C:\Users\dachner\AppData\Roaming\gramps\grampsdb\6a1764f8\sqlite.db"
-)
-
-
-def _find_db() -> str:
-    explicit = os.environ.get("GRAMPS_TEST_DB_PATH")
-    if explicit:
-        return explicit
-    if _ANON_DB.exists():
-        return str(_ANON_DB)
-    return _REAL_DB
-
-
-REAL_DB = _find_db()
+EXPLICIT_DB = os.environ.get("GRAMPS_TEST_DB_PATH")
 
 pytestmark = pytest.mark.integration
 
 
 def _db_available() -> bool:
-    return os.path.exists(REAL_DB)
+    return not EXPLICIT_DB or os.path.exists(EXPLICIT_DB)
+
+
+def _write_test_db(target) -> None:
+    """
+    Create the database for a test at the given path.
+
+    Reason: always a new file, because opening a database switches it to WAL mode
+    and these tests write to it. A database passed in must stay untouched.
+
+    Args:
+        target: File path to create.
+    """
+    if EXPLICIT_DB:
+        shutil.copy(EXPLICIT_DB, target)
+    else:
+        write_synthetic_tree(target)
 
 
 skip_if_no_db = pytest.mark.skipif(
     not _db_available(),
-    reason=f"No Gramps DB found at {REAL_DB}. "
-           "Set GRAMPS_TEST_DB_PATH or regenerate tests/fixtures/test_gramps.sqlite.",
+    reason=f"GRAMPS_TEST_DB_PATH does not exist: {EXPLICIT_DB}",
 )
 
 
@@ -65,12 +67,14 @@ skip_if_no_db = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
-def real_client():
-    """GrampsSqliteClient connected to the real Gramps database."""
+def real_client(tmp_path_factory):
+    """GrampsSqliteClient connected to a new test database file."""
     if not _db_available():
-        pytest.skip(f"Real DB not found: {REAL_DB}")
+        pytest.skip(f"GRAMPS_TEST_DB_PATH does not exist: {EXPLICIT_DB}")
     from gramps_mcp.sqlite_client import GrampsSqliteClient
-    return GrampsSqliteClient(REAL_DB)
+    path = tmp_path_factory.mktemp("integration_db") / "sqlite.db"
+    _write_test_db(path)
+    return GrampsSqliteClient(str(path))
 
 
 @pytest.fixture(scope="module")
@@ -654,7 +658,7 @@ class TestWriteRoundtrip:
 
         # Fresh copy so we don't modify the shared fixture
         db_copy = tmp_path / "roundtrip.sqlite"
-        shutil.copy(REAL_DB, db_copy)
+        _write_test_db(db_copy)
 
         client = GrampsSqliteClient(str(db_copy))
         new_person = {
@@ -692,7 +696,7 @@ class TestWriteRoundtrip:
         from gramps_mcp.sqlite_client import GrampsSqliteClient
 
         db_copy = tmp_path / "update_roundtrip.sqlite"
-        shutil.copy(REAL_DB, db_copy)
+        _write_test_db(db_copy)
 
         client = GrampsSqliteClient(str(db_copy))
         # Get any person
@@ -717,7 +721,7 @@ class TestWriteRoundtrip:
         from gramps_mcp.sqlite_client import GrampsSqliteClient
 
         db_copy = tmp_path / "event_roundtrip.sqlite"
-        shutil.copy(REAL_DB, db_copy)
+        _write_test_db(db_copy)
 
         client = GrampsSqliteClient(str(db_copy))
         new_event = {
