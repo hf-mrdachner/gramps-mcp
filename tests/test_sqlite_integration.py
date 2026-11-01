@@ -36,10 +36,6 @@ EXPLICIT_DB = os.environ.get("GRAMPS_TEST_DB_PATH")
 pytestmark = pytest.mark.integration
 
 
-def _db_available() -> bool:
-    return not EXPLICIT_DB or os.path.exists(EXPLICIT_DB)
-
-
 def _write_test_db(target) -> None:
     """
     Create the database for a test at the given path.
@@ -56,10 +52,10 @@ def _write_test_db(target) -> None:
         write_synthetic_tree(target)
 
 
-skip_if_no_db = pytest.mark.skipif(
-    not _db_available(),
-    reason=f"GRAMPS_TEST_DB_PATH does not exist: {EXPLICIT_DB}",
-)
+# Reason: an error instead of a skip, because a mistyped path would otherwise give
+# a green run that tested nothing, right when someone wants to check a real tree.
+if EXPLICIT_DB and not os.path.exists(EXPLICIT_DB):
+    raise FileNotFoundError(f"GRAMPS_TEST_DB_PATH does not exist: {EXPLICIT_DB}")
 
 
 # ---------------------------------------------------------------------------
@@ -69,8 +65,6 @@ skip_if_no_db = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def real_client(tmp_path_factory):
     """GrampsSqliteClient connected to a new test database file."""
-    if not _db_available():
-        pytest.skip(f"GRAMPS_TEST_DB_PATH does not exist: {EXPLICIT_DB}")
     from gramps_mcp.sqlite_client import GrampsSqliteClient
     path = tmp_path_factory.mktemp("integration_db") / "sqlite.db"
     _write_test_db(path)
@@ -87,23 +81,18 @@ def real_db(real_client):
 # ---------------------------------------------------------------------------
 
 class TestLoader:
-    @skip_if_no_db
     def test_loads_without_error(self, real_db):
         assert real_db is not None
 
-    @skip_if_no_db
     def test_has_people(self, real_db):
         assert real_db.count("person") > 0
 
-    @skip_if_no_db
     def test_has_families(self, real_db):
         assert real_db.count("family") > 0
 
-    @skip_if_no_db
     def test_has_events(self, real_db):
         assert real_db.count("event") > 0
 
-    @skip_if_no_db
     def test_counts_logged(self, real_db, capsys):
         # Just verify counts are reasonable
         people = real_db.count("person")
@@ -120,18 +109,15 @@ class TestLoader:
 # ---------------------------------------------------------------------------
 
 class TestPersonInvariants:
-    @skip_if_no_db
     def test_all_persons_have_handle(self, real_db):
         for p in real_db.all("person"):
             assert "handle" in p, f"Missing handle: {p}"
             assert isinstance(p["handle"], str) and p["handle"]
 
-    @skip_if_no_db
     def test_all_persons_have_gramps_id(self, real_db):
         for p in real_db.all("person"):
             assert "gramps_id" in p, f"Missing gramps_id: {p.get('handle')}"
 
-    @skip_if_no_db
     def test_all_persons_have_primary_name(self, real_db):
         for p in real_db.all("person"):
             pn = p.get("primary_name")
@@ -139,7 +125,6 @@ class TestPersonInvariants:
                 f"primary_name is not a dict for {p.get('gramps_id')}: {type(pn)}"
             )
 
-    @skip_if_no_db
     def test_first_name_is_string(self, real_db):
         for p in real_db.all("person"):
             first = p.get("primary_name", {}).get("first_name")
@@ -147,7 +132,6 @@ class TestPersonInvariants:
                 f"first_name not str for {p.get('gramps_id')}: {type(first)}"
             )
 
-    @skip_if_no_db
     def test_surname_list_is_list(self, real_db):
         for p in real_db.all("person"):
             sl = p.get("primary_name", {}).get("surname_list")
@@ -155,7 +139,6 @@ class TestPersonInvariants:
                 f"surname_list not list for {p.get('gramps_id')}: {type(sl)}"
             )
 
-    @skip_if_no_db
     def test_surname_list_entries_have_surname_key(self, real_db):
         for p in real_db.all("person"):
             for sn in p.get("primary_name", {}).get("surname_list", []):
@@ -164,7 +147,6 @@ class TestPersonInvariants:
                 )
                 assert isinstance(sn["surname"], str)
 
-    @skip_if_no_db
     def test_gender_is_int(self, real_db):
         for p in real_db.all("person"):
             g = p.get("gender")
@@ -172,7 +154,6 @@ class TestPersonInvariants:
                 f"gender invalid for {p.get('gramps_id')}: {g}"
             )
 
-    @skip_if_no_db
     def test_event_ref_list_is_list(self, real_db):
         for p in real_db.all("person"):
             erl = p.get("event_ref_list")
@@ -180,7 +161,6 @@ class TestPersonInvariants:
                 f"event_ref_list not list for {p.get('gramps_id')}: {type(erl)}"
             )
 
-    @skip_if_no_db
     def test_event_ref_role_is_string(self, real_db):
         for p in real_db.all("person"):
             for eref in p.get("event_ref_list", []):
@@ -190,7 +170,6 @@ class TestPersonInvariants:
                     f"{type(role)} = {role!r}"
                 )
 
-    @skip_if_no_db
     def test_no_class_keys_in_person(self, real_db):
         for p in real_db.all("person"):
             assert "_class" not in p, (
@@ -200,7 +179,6 @@ class TestPersonInvariants:
                 f"_class in primary_name of {p.get('gramps_id')}"
             )
 
-    @skip_if_no_db
     def test_family_list_contains_strings(self, real_db):
         for p in real_db.all("person"):
             for h in p.get("family_list", []):
@@ -214,7 +192,6 @@ class TestPersonInvariants:
 # ---------------------------------------------------------------------------
 
 class TestEventInvariants:
-    @skip_if_no_db
     def test_event_type_is_string(self, real_db):
         for ev in real_db.all("event"):
             t = ev.get("type")
@@ -223,7 +200,6 @@ class TestEventInvariants:
                 f"{type(t)} = {t!r}"
             )
 
-    @skip_if_no_db
     def test_event_type_not_empty(self, real_db):
         unknown_count = sum(
             1 for ev in real_db.all("event")
@@ -235,7 +211,6 @@ class TestEventInvariants:
         # Allow up to 5% unmapped — flags real mapping gaps
         assert pct < 5, f"Too many unmapped event types: {unknown_count}/{total}"
 
-    @skip_if_no_db
     def test_event_date_has_string_key(self, real_db):
         for ev in real_db.all("event"):
             date = ev.get("date", {})
@@ -248,7 +223,6 @@ class TestEventInvariants:
                     f"date has 'text' key (not normalised) for {ev.get('gramps_id')}"
                 )
 
-    @skip_if_no_db
     def test_event_date_dateval_is_list(self, real_db):
         for ev in real_db.all("event"):
             date = ev.get("date", {})
@@ -264,14 +238,12 @@ class TestEventInvariants:
 # ---------------------------------------------------------------------------
 
 class TestFamilyInvariants:
-    @skip_if_no_db
     def test_family_has_relationship_key(self, real_db):
         for fam in real_db.all("family"):
             assert "relationship" in fam, (
                 f"family {fam.get('gramps_id')} missing 'relationship'"
             )
 
-    @skip_if_no_db
     def test_family_has_no_type_key(self, real_db):
         for fam in real_db.all("family"):
             assert "type" not in fam, (
@@ -279,7 +251,6 @@ class TestFamilyInvariants:
                 "(normalization failed)"
             )
 
-    @skip_if_no_db
     def test_relationship_is_string(self, real_db):
         for fam in real_db.all("family"):
             r = fam.get("relationship")
@@ -287,7 +258,6 @@ class TestFamilyInvariants:
                 f"relationship not str for {fam.get('gramps_id')}: {type(r)}"
             )
 
-    @skip_if_no_db
     def test_child_ref_frel_is_string(self, real_db):
         for fam in real_db.all("family"):
             for cref in fam.get("child_ref_list", []):
@@ -303,7 +273,6 @@ class TestFamilyInvariants:
 # ---------------------------------------------------------------------------
 
 class TestPlaceInvariants:
-    @skip_if_no_db
     def test_place_type_is_string(self, real_db):
         for pl in real_db.all("place"):
             pt = pl.get("place_type")
@@ -317,7 +286,6 @@ class TestPlaceInvariants:
 # ---------------------------------------------------------------------------
 
 class TestCrossReferences:
-    @skip_if_no_db
     def test_event_refs_resolve(self, real_db):
         """Every eventref in a person must point to an existing event."""
         missing = []
@@ -328,7 +296,6 @@ class TestCrossReferences:
                     missing.append((p.get("gramps_id"), h))
         assert not missing, f"Dangling event refs: {missing[:5]}"
 
-    @skip_if_no_db
     def test_family_refs_resolve(self, real_db):
         """Every family_list handle in a person must exist."""
         missing = []
@@ -338,7 +305,6 @@ class TestCrossReferences:
                     missing.append((p.get("gramps_id"), fh))
         assert not missing, f"Dangling family refs: {missing[:5]}"
 
-    @skip_if_no_db
     def test_birth_ref_index_in_range(self, real_db):
         """birth_ref_index must be -1 or a valid index into event_ref_list."""
         bad = []
@@ -355,69 +321,63 @@ class TestCrossReferences:
 # ---------------------------------------------------------------------------
 
 class TestHandlerSmoke:
-    @skip_if_no_db
     @pytest.mark.asyncio
     async def test_format_person_runs(self, real_client, real_db):
-        """format_person handler must not crash on the first person."""
+        """format_person handler must not crash on any person."""
         from gramps_mcp.handlers.person_handler import format_person
-        person = next(iter(real_db.all("person")))
-        result = await format_person(real_client, "default", person["handle"])
-        assert isinstance(result, str)
-        assert len(result) > 0
+        for person in real_db.all("person"):
+            result = await format_person(real_client, "default", person["handle"])
+            assert isinstance(result, str)
+            assert len(result) > 0
 
-    @skip_if_no_db
     @pytest.mark.asyncio
     async def test_format_family_runs(self, real_client, real_db):
-        """format_family handler must not crash on the first family."""
+        """format_family handler must not crash on any family."""
         from gramps_mcp.handlers.family_handler import format_family
-        family = next(iter(real_db.all("family")))
-        result = await format_family(real_client, "default", family["handle"])
-        assert isinstance(result, str)
-        assert len(result) > 0
+        for family in real_db.all("family"):
+            result = await format_family(real_client, "default", family["handle"])
+            assert isinstance(result, str)
+            assert len(result) > 0
 
-    @skip_if_no_db
     @pytest.mark.asyncio
     async def test_format_note_handler(self, real_client, real_db):
         """format_note handler must not crash."""
         if real_db.count("note") == 0:
             pytest.skip("No notes in DB")
         from gramps_mcp.handlers.note_handler import format_note
-        note = next(iter(real_db.all("note")))
-        result = await format_note(real_client, "default", note["handle"])
-        assert isinstance(result, str)
+        for note in real_db.all("note"):
+            result = await format_note(real_client, "default", note["handle"])
+            assert isinstance(result, str)
 
-    @skip_if_no_db
     @pytest.mark.asyncio
     async def test_format_place_inline(self, real_client, real_db):
         """format_place handler must not crash."""
         if real_db.count("place") == 0:
             pytest.skip("No places in DB")
         from gramps_mcp.handlers.place_handler import format_place
-        place = next(iter(real_db.all("place")))
-        result = await format_place(real_client, "default", place["handle"], inline=True)
-        assert isinstance(result, str)
+        for place in real_db.all("place"):
+            result = await format_place(real_client, "default", place["handle"], inline=True)
+            assert isinstance(result, str)
 
-    @skip_if_no_db
     @pytest.mark.asyncio
     async def test_format_source_runs(self, real_client, real_db):
         """format_source handler must not crash."""
         if real_db.count("source") == 0:
             pytest.skip("No sources in DB")
         from gramps_mcp.handlers.source_handler import format_source
-        source = next(iter(real_db.all("source")))
-        result = await format_source(real_client, "default", source["handle"])
-        assert isinstance(result, str)
+        for source in real_db.all("source"):
+            result = await format_source(real_client, "default", source["handle"])
+            assert isinstance(result, str)
 
-    @skip_if_no_db
     @pytest.mark.asyncio
     async def test_format_citation_runs(self, real_client, real_db):
         """format_citation handler must not crash."""
         if real_db.count("citation") == 0:
             pytest.skip("No citations in DB")
         from gramps_mcp.handlers.citation_handler import format_citation
-        citation = next(iter(real_db.all("citation")))
-        result = await format_citation(real_client, "default", citation["handle"])
-        assert isinstance(result, str)
+        for citation in real_db.all("citation"):
+            result = await format_citation(real_client, "default", citation["handle"])
+            assert isinstance(result, str)
 
 
 # ---------------------------------------------------------------------------
@@ -426,7 +386,6 @@ class TestHandlerSmoke:
 
 
 class TestSourceInvariants:
-    @skip_if_no_db
     def test_source_title_is_string(self, real_db):
         for src in real_db.all("source"):
             t = src.get("title")
@@ -434,7 +393,6 @@ class TestSourceInvariants:
                 f"source title not str for {src.get('gramps_id')}: {type(t)}"
             )
 
-    @skip_if_no_db
     def test_source_note_list_is_list(self, real_db):
         for src in real_db.all("source"):
             nl = src.get("note_list")
@@ -442,7 +400,6 @@ class TestSourceInvariants:
                 f"source note_list not list for {src.get('gramps_id')}: {type(nl)}"
             )
 
-    @skip_if_no_db
     def test_source_reporef_list_is_list(self, real_db):
         for src in real_db.all("source"):
             rl = src.get("reporef_list")
@@ -450,7 +407,6 @@ class TestSourceInvariants:
                 f"source reporef_list not list for {src.get('gramps_id')}: {type(rl)}"
             )
 
-    @skip_if_no_db
     def test_source_reporef_has_ref_key(self, real_db):
         for src in real_db.all("source"):
             for rref in src.get("reporef_list", []):
@@ -459,7 +415,6 @@ class TestSourceInvariants:
                 )
                 assert isinstance(rref["ref"], str)
 
-    @skip_if_no_db
     def test_source_media_list_is_list(self, real_db):
         for src in real_db.all("source"):
             ml = src.get("media_list")
@@ -467,7 +422,6 @@ class TestSourceInvariants:
                 f"source media_list not list for {src.get('gramps_id')}: {type(ml)}"
             )
 
-    @skip_if_no_db
     def test_source_no_class_keys(self, real_db):
         for src in real_db.all("source"):
             assert "_class" not in src, (
@@ -476,7 +430,6 @@ class TestSourceInvariants:
 
 
 class TestCitationInvariants:
-    @skip_if_no_db
     def test_citation_page_is_string(self, real_db):
         for cit in real_db.all("citation"):
             p = cit.get("page")
@@ -484,7 +437,6 @@ class TestCitationInvariants:
                 f"citation page not str for {cit.get('gramps_id')}: {type(p)}"
             )
 
-    @skip_if_no_db
     def test_citation_confidence_is_int(self, real_db):
         for cit in real_db.all("citation"):
             c = cit.get("confidence")
@@ -492,7 +444,6 @@ class TestCitationInvariants:
                 f"citation confidence not int for {cit.get('gramps_id')}: {type(c)}"
             )
 
-    @skip_if_no_db
     def test_citation_source_handle_resolves(self, real_db):
         missing = []
         for cit in real_db.all("citation"):
@@ -501,7 +452,6 @@ class TestCitationInvariants:
                 missing.append((cit.get("gramps_id"), sh))
         assert not missing, f"Dangling source refs in citations: {missing[:5]}"
 
-    @skip_if_no_db
     def test_citation_date_normalised(self, real_db):
         for cit in real_db.all("citation"):
             date = cit.get("date", {})
@@ -515,7 +465,6 @@ class TestCitationInvariants:
 
 
 class TestRepositoryInvariants:
-    @skip_if_no_db
     def test_repository_name_is_string(self, real_db):
         for repo in real_db.all("repository"):
             n = repo.get("name")
@@ -523,7 +472,6 @@ class TestRepositoryInvariants:
                 f"repo name not str for {repo.get('gramps_id')}: {type(n)}"
             )
 
-    @skip_if_no_db
     def test_repository_urls_is_list(self, real_db):
         for repo in real_db.all("repository"):
             urls = repo.get("urls")
@@ -531,7 +479,6 @@ class TestRepositoryInvariants:
                 f"repo urls not list for {repo.get('gramps_id')}: {type(urls)}"
             )
 
-    @skip_if_no_db
     def test_repository_no_class_keys(self, real_db):
         for repo in real_db.all("repository"):
             assert "_class" not in repo, (
@@ -540,7 +487,6 @@ class TestRepositoryInvariants:
 
 
 class TestMediaInvariants:
-    @skip_if_no_db
     def test_media_path_is_string(self, real_db):
         for m in real_db.all("media"):
             p = m.get("path")
@@ -548,7 +494,6 @@ class TestMediaInvariants:
                 f"media path not str for {m.get('gramps_id')}: {type(p)}"
             )
 
-    @skip_if_no_db
     def test_media_mime_is_string(self, real_db):
         for m in real_db.all("media"):
             mime = m.get("mime")
@@ -556,7 +501,6 @@ class TestMediaInvariants:
                 f"media mime not str for {m.get('gramps_id')}: {type(mime)}"
             )
 
-    @skip_if_no_db
     def test_media_date_normalised(self, real_db):
         for m in real_db.all("media"):
             date = m.get("date", {})
@@ -567,7 +511,6 @@ class TestMediaInvariants:
 
 
 class TestNoteInvariants:
-    @skip_if_no_db
     def test_note_text_has_string_key(self, real_db):
         for note in real_db.all("note"):
             text = note.get("text")
@@ -577,7 +520,6 @@ class TestNoteInvariants:
                     f"{list(text.keys())}"
                 )
 
-    @skip_if_no_db
     def test_note_no_class_keys(self, real_db):
         for note in real_db.all("note"):
             assert "_class" not in note, (
@@ -591,7 +533,6 @@ class TestNoteInvariants:
 
 
 class TestDateVariety:
-    @skip_if_no_db
     def test_daterange_normalised(self, real_db):
         """Events with daterange must have modifier=4 and a 'string' key."""
         checked = 0
@@ -605,7 +546,6 @@ class TestDateVariety:
                 checked += 1
         print(f"\n  daterange events found: {checked}")
 
-    @skip_if_no_db
     def test_datespan_normalised(self, real_db):
         """Events with datespan must have modifier=5."""
         checked = 0
@@ -617,7 +557,6 @@ class TestDateVariety:
                 checked += 1
         print(f"\n  datespan events found: {checked}")
 
-    @skip_if_no_db
     def test_datestr_normalised(self, real_db):
         """Text-only dates (modifier=6) must have a non-empty 'string'."""
         checked = 0
@@ -627,11 +566,10 @@ class TestDateVariety:
                 assert "string" in date
                 assert "text" not in date
                 # datestr should have a meaningful string value
-                assert isinstance(date["string"], str)
+                assert isinstance(date["string"], str) and date["string"]
                 checked += 1
         print(f"\n  datestr events found: {checked}")
 
-    @skip_if_no_db
     def test_no_raw_text_key_anywhere(self, real_db):
         """No date dict in any object should have a 'text' key after normalisation."""
         violations = []
@@ -651,7 +589,6 @@ class TestDateVariety:
 
 
 class TestWriteRoundtrip:
-    @skip_if_no_db
     def test_create_person_persists_to_disk(self, tmp_path):
         """Write a new person → close connection → reopen → person still there."""
         from gramps_mcp.sqlite_client import GrampsSqliteClient
@@ -690,7 +627,6 @@ class TestWriteRoundtrip:
         assert fetched["gender"] == 0
         client2._db.close()
 
-    @skip_if_no_db
     def test_update_person_persists_to_disk(self, tmp_path):
         """Update an existing person → close → reopen → change visible."""
         from gramps_mcp.sqlite_client import GrampsSqliteClient
@@ -715,7 +651,6 @@ class TestWriteRoundtrip:
         )
         client2._db.close()
 
-    @skip_if_no_db
     def test_create_event_with_type_persists(self, tmp_path):
         """Event type must survive denorm → SQLite → renorm roundtrip."""
         from gramps_mcp.sqlite_client import GrampsSqliteClient

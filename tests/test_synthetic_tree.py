@@ -21,7 +21,8 @@ REPO_ROOT = Path(__file__).parent.parent
 # Formats that hold family-tree data. Binary sample images are not covered:
 # tests/sample holds a historical register page from the upstream project.
 DATA_FILE = re.compile(
-    r"\.(sqlite3?|db|gpkg|gramps|ged|gedcom)(-shm|-wal)?$", re.IGNORECASE
+    r"\.(sqlite3?|db|gpkg|gramps|ged|gedcom)(-shm|-wal|-journal|\.gz|\.bak)?$",
+    re.IGNORECASE,
 )
 
 
@@ -67,18 +68,20 @@ def test_all_date_forms_occur(tree):
 
 def test_range_dates_have_both_ends(tree):
     """Ranges and spans use the eight-element dateval."""
-    lengths = {
-        event["date"]["modifier"]: len(event["date"]["dateval"])
+    ranges = [
+        event["date"]["dateval"]
         for event in _objects(tree, "event")
-    }
-    assert lengths[4] == 8
-    assert lengths[5] == 8
+        if event["date"]["modifier"] in (4, 5)
+    ]
+    assert ranges
+    assert all(len(dateval) == 8 for dateval in ranges)
 
 
 def test_custom_types_occur(tree):
     """Custom event and note types carry their label in ``string``."""
-    assert any(event["type"]["string"] for event in _objects(tree, "event"))
-    assert any(note["type"]["string"] for note in _objects(tree, "note"))
+    for table in ("event", "note"):
+        types = [obj["type"] for obj in _objects(tree, table)]
+        assert any(kind["value"] == 0 and kind["string"] for kind in types)
 
 
 def test_all_genders_occur(tree):
@@ -129,12 +132,14 @@ def test_place_hierarchy_has_several_levels(tree):
 
 def test_repository_has_no_tracked_data_files():
     """No database or tree export may be committed, however well anonymized."""
+    # Reason: -z, because git otherwise quotes non-ASCII paths, which would hide
+    # the file extension from the pattern.
     tracked = subprocess.run(
-        ["git", "ls-files"],
+        ["git", "ls-files", "-z"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=True,
-    ).stdout.splitlines()
+    ).stdout.split("\0")
     data_files = [path for path in tracked if DATA_FILE.search(path)]
     assert not data_files, f"Data files in the repository: {data_files}"
