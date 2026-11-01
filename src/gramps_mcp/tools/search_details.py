@@ -33,6 +33,7 @@ from ..handlers.date_handler import format_date
 from ..handlers.family_detail_handler import format_family_detail
 from ..handlers.person_detail_handler import format_person_detail
 from ..handlers.place_handler import format_place
+from ..handlers.url_utils import url_description
 from ..models.api_calls import ApiCalls
 from .search_basic import with_client
 
@@ -222,7 +223,7 @@ async def get_place_tool(client, arguments: Dict) -> List[TextContent]:
         for url in urls:
             if isinstance(url, dict):
                 lines.append(
-                    f"* {url.get('description', 'URL')}: {url.get('path', '')}"
+                    f"* {url_description(url) or 'URL'}: {url.get('path', '')}"
                 )
 
         # Scan all events for this place handle
@@ -1291,6 +1292,9 @@ async def get_type_tool(arguments: Dict) -> List[TextContent]:
     handle = arguments.get("handle")
     gramps_id = arguments.get("gramps_id")
 
+    if not handle and not gramps_id:
+        return [TextContent(type="text", text="Error: handle or gramps_id is required")]
+
     # If gramps_id provided but no handle, find the handle first
     if gramps_id and not handle:
         from .search_basic import find_type_tool
@@ -1301,15 +1305,31 @@ async def get_type_tool(arguments: Dict) -> List[TextContent]:
 
         # Extract handle from search result
         search_text = search_result[0].text
+        # Reason: pass search failures (e.g. no database connected) on unchanged
+        # instead of reporting them as a missing record.
+        if search_text.startswith("Error:"):
+            return search_result
+
         import re
 
         handle_match = re.search(r"\[([^\]]+)\]", search_text)
-        if handle_match:
-            handle = handle_match.group(1)
+        if not handle_match:
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Error: {entity_type} with gramps_id '{gramps_id}' not found",
+                )
+            ]
+        handle = handle_match.group(1)
 
-    if entity_type == "person" and handle:
+    if entity_type == "person":
         return await get_person_tool({"person_handle": handle})
-    elif entity_type == "family" and handle:
+    elif entity_type == "family":
         return await get_family_tool({"family_handle": handle})
 
-    return [TextContent(type="text", text="get_type_tool not yet implemented")]
+    return [
+        TextContent(
+            type="text",
+            text=f"Error: get_type supports person and family, not '{entity_type}'",
+        )
+    ]

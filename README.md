@@ -410,6 +410,17 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - Submitting pull requests
 - Reporting issues and requesting features
 
+### Running the Tests
+
+`uv run pytest` needs no configuration and no running services. Tool-level tests
+run against a temporary SQLite database, and `tests/test_server.py` starts its own
+server on a free port.
+
+Tests marked `webapi` need a live Gramps Web API and are skipped by default. To run
+them, set `GRAMPS_TEST_BACKEND=web` together with the `GRAMPS_API_URL`,
+`GRAMPS_USERNAME` and `GRAMPS_PASSWORD` of a disposable instance, because these
+tests create records. `.github/workflows/test.yml` shows the full setup.
+
 ### Community & Support
 
 - **Bug Reports & Feature Requests**: [GitHub Issues](https://github.com/cabout/gramps-mcp/issues)

@@ -38,6 +38,8 @@ from src.gramps_mcp.tools.search_basic import (
     find_source_tool,
 )
 
+pytestmark = pytest.mark.usefixtures("live_backend")
+
 
 class TestCompleteWorkflow:
     """
@@ -59,7 +61,10 @@ class TestCompleteWorkflow:
     genealogy databases.
     """
     
-    @pytest.mark.asyncio 
+    # Reason for webapi: the workflow uploads media, which the SQLite backend
+    # does not support yet.
+    @pytest.mark.webapi
+    @pytest.mark.asyncio
     async def test_complete_marriage_record_workflow(self):
         """
         Test the complete workflow by processing a marriage record.
@@ -123,6 +128,8 @@ class TestCompleteWorkflow:
         print(f"  City: {workflow_data['city_handle']}")
         print(f"  Church: {workflow_data['church_handle']}")
     
+    # Reason for webapi: uploads media, which the SQLite backend does not support yet.
+    @pytest.mark.webapi
     @pytest.mark.asyncio
     async def test_all_entity_attributes_comprehensive(self):
         """

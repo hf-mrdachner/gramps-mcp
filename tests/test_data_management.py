@@ -21,6 +21,8 @@ from src.gramps_mcp.tools.data_management import (
     create_source_tool,
 )
 
+pytestmark = pytest.mark.usefixtures("live_backend")
+
 # Store handles for chaining tests following proper Gramps workflow
 test_note_handle = None
 test_media_handle = None
@@ -72,6 +74,9 @@ class TestCreateNoteTool:
 class TestCreateMediaTool:
     """Test create_media_tool functionality - Second in workflow."""
 
+    # Reason for webapi: the SQLite backend does not support media upload yet.
+    # Later tests in this module only attach the media when it exists.
+    @pytest.mark.webapi
     @pytest.mark.asyncio
     async def test_create_media_success(self):
         """Test successful media creation with actual file upload."""

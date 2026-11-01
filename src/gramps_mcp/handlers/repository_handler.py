@@ -23,6 +23,7 @@ Provides clean, direct formatting of repository data from handles.
 import logging
 
 from ..models.api_calls import ApiCalls
+from .url_utils import url_description
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ async def format_repository(client, tree_id: str, handle: str) -> str:
         urls = repo_data.get("urls", [])
         for url in urls:
             path = url.get("path", "")
-            desc = url.get("desc", "")
+            desc = url_description(url)
             if path:
                 url_line = path
                 if desc:
