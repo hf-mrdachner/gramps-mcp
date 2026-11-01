@@ -424,6 +424,22 @@ def _make_in_memory_db() -> sqlite3.Connection:
     return conn
 
 
+def write_fixture_db(path) -> None:
+    """
+    Write the synthetic fixture database to a real SQLite file.
+
+    Args:
+        path: Target file path. The parent directory must already exist.
+    """
+    source = _make_in_memory_db()
+    target = sqlite3.connect(path)
+    try:
+        source.backup(target)
+    finally:
+        target.close()
+        source.close()
+
+
 @pytest.fixture(scope="session")
 def sqlite_conn():
     """In-memory SQLite connection loaded with synthetic Gramps data."""

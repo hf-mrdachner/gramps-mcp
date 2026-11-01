@@ -24,6 +24,8 @@ TEST_PAGESIZE = 3
 TEST_MAX_GENERATIONS = 2
 INVALID_GRAMPS_ID = "INVALID99999"
 
+pytestmark = pytest.mark.usefixtures("live_backend")
+
 
 def extract_handle_from_search(search_text: str):
     """Extract handle from search result text."""
@@ -83,8 +85,8 @@ class TestGetDescendantsTool:
                 print("\n=== DESCENDANTS TEST OUTPUT (EXPLICIT) ===")
                 print(f"Person gramps_id used: {gramps_id}")
                 print(f"Max generations: {TEST_MAX_GENERATIONS}")
-                print(f"Total lines: {len(text_explicit.split('\n'))}")
-                
+                print(f"Total lines: {len(text_explicit.splitlines())}")
+
                 # Test default result
                 assert isinstance(result_default, list)
                 assert len(result_default) == 1
@@ -94,7 +96,7 @@ class TestGetDescendantsTool:
                 print("\n=== DESCENDANTS TEST OUTPUT (DEFAULT) ===")
                 print(f"Person gramps_id used: {gramps_id}")
                 print(f"Max generations: DEFAULT (should be 5)")
-                print(f"Total lines: {len(text_default.split('\n'))}")
+                print(f"Total lines: {len(text_default.splitlines())}")
                 print("=" * 50)
 
                 # Both should contain actual descendants data
@@ -139,8 +141,8 @@ class TestGetAncestorsTool:
     async def test_get_ancestors_real_api(self):
         """Test get_ancestors_tool with real API."""
 
-        # Use specific person I0001 for ancestor testing (known to have ancestors)
-        gramps_id = "I0001"
+        # Use specific person I0003 for ancestor testing (known to have ancestors)
+        gramps_id = "I0003"
         
         # Test with explicit max_generations
         result_explicit = await get_ancestors_tool(
@@ -159,8 +161,8 @@ class TestGetAncestorsTool:
         print("\n=== ANCESTORS TEST OUTPUT (EXPLICIT) ===")
         print(f"Person gramps_id used: {gramps_id}")
         print(f"Max generations: {TEST_MAX_GENERATIONS}")
-        print(f"Total lines: {len(text_explicit.split('\n'))}")
-        
+        print(f"Total lines: {len(text_explicit.splitlines())}")
+
         # Test default result
         assert isinstance(result_default, list)
         assert len(result_default) == 1
@@ -170,7 +172,7 @@ class TestGetAncestorsTool:
         print("\n=== ANCESTORS TEST OUTPUT (DEFAULT) ===")
         print(f"Person gramps_id used: {gramps_id}")
         print(f"Max generations: DEFAULT (should be 5)")
-        print(f"Total lines: {len(text_default.split('\n'))}")
+        print(f"Total lines: {len(text_default.splitlines())}")
         print("=" * 50)
 
         # Both should contain actual ancestors data
@@ -195,6 +197,8 @@ class TestGetAncestorsTool:
 class TestGetRecentChangesTool:
     """Test get_recent_changes_tool functionality."""
 
+    # Reason for webapi: the SQLite backend has no transaction history.
+    @pytest.mark.webapi
     @pytest.mark.asyncio
     async def test_get_recent_changes_real_api(self):
         """Test get_recent_changes_tool with real API."""

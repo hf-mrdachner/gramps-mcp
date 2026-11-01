@@ -17,6 +17,8 @@ from src.gramps_mcp.config import get_settings
 from src.gramps_mcp.models.api_calls import ApiCalls
 from src.gramps_mcp.models.parameters.base_params import BaseGetMultipleParams
 
+pytestmark = pytest.mark.webapi
+
 
 class TestGetPersonCall:
     """Test GET_PERSON API call directly."""

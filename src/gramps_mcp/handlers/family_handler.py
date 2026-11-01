@@ -25,6 +25,7 @@ import logging
 from ..models.api_calls import ApiCalls
 from .date_handler import format_date
 from .place_handler import format_place
+from .url_utils import url_description
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +231,7 @@ async def format_family(client, tree_id: str, handle: str) -> str:
             for url in urls:
                 if isinstance(url, dict):
                     url_path = url.get("path", "")
-                    url_desc = url.get("description", "")
+                    url_desc = url_description(url)
                     if url_path:
                         if url_desc:
                             result += f"{url_path} - {url_desc}\n"

@@ -27,6 +27,8 @@ from gramps_mcp.tools.search_basic import (
 # Load environment variables
 load_dotenv()
 
+pytestmark = pytest.mark.usefixtures("live_backend")
+
 
 class TestFindPersonTool:
     """Test find_type_tool functionality for person with real API."""
@@ -293,7 +295,7 @@ class TestFindAnythingTool:
     async def test_find_anything(self):
         """Test search across all object types with query."""
         result = await find_anything_tool({
-            "query": "pietrala",
+            "query": "Smith",
             "max_results": 3
         })
         

@@ -5,8 +5,11 @@ These tests verify that the MCP server correctly implements the protocol
 and can handle real API calls to Gramps Web API endpoints.
 """
 
+import socket
 import subprocess
 import sys
+import time
+from pathlib import Path
 
 import httpx
 import pytest
@@ -15,17 +18,95 @@ from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import InitializeResult, TextContent
 
+from src.gramps_mcp.server import TOOL_REGISTRY
+
 # Load environment variables
 load_dotenv()
 
 # Set timeout for all async operations
 TIMEOUT = 5.0
 
-# Base URL for the live server
+# Maximum time to wait for the server process to accept requests
+SERVER_STARTUP_TIMEOUT = 60.0
+
+# Base URL for the live server. Points at the externally started server in web
+# mode; the mcp_server fixture replaces it with the server it starts itself.
 BASE_URL = "http://localhost:8000"
 
 # Pytest timeout configuration
 pytestmark = pytest.mark.timeout(TIMEOUT)
+
+
+def _free_port() -> int:
+    """Return a TCP port that is currently free on localhost."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _wait_until_healthy(process: subprocess.Popen, log_path: Path) -> None:
+    """
+    Block until the server answers on /health.
+
+    Args:
+        process (subprocess.Popen): The running server process.
+        log_path (Path): File receiving the server's output, shown on failure.
+    """
+    deadline = time.monotonic() + SERVER_STARTUP_TIMEOUT
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            break
+        try:
+            if httpx.get(f"{BASE_URL}/health", timeout=1.0).status_code == 200:
+                return
+        except httpx.HTTPError:
+            pass
+        time.sleep(0.2)
+    pytest.fail(f"MCP server did not become healthy:\n{log_path.read_text()}")
+
+
+@pytest.fixture(scope="module", autouse=True)
+def mcp_server(live_backend, tmp_path_factory):
+    """
+    Run a real MCP server process against the module's live backend.
+
+    Reason: a free port instead of 8000, so the tests neither collide with nor
+    accidentally talk to a gramps-mcp server the developer already has running.
+    In web mode the server is started externally (see .github/workflows/test.yml).
+    """
+    global BASE_URL
+    if live_backend == "web":
+        yield
+        return
+
+    port = _free_port()
+    original_base_url = BASE_URL
+    BASE_URL = f"http://127.0.0.1:{port}"
+    log_path = tmp_path_factory.mktemp("mcp_server") / "server.log"
+    start_code = (
+        "from src.gramps_mcp.server import app; "
+        "app.settings.host = '127.0.0.1'; "
+        f"app.settings.port = {port}; "
+        "app.run(transport='streamable-http')"
+    )
+    with log_path.open("w") as log_file:
+        process = subprocess.Popen(
+            [sys.executable, "-c", start_code],
+            cwd=Path(__file__).parent.parent,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            _wait_until_healthy(process, log_path)
+            yield
+        finally:
+            BASE_URL = original_base_url
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
 
 
 class TestServerBuild:
@@ -70,12 +151,13 @@ class TestMCPServerSetup:
             async with ClientSession(read_stream, write_stream) as session:
                 result = await session.initialize()
                 assert isinstance(result, InitializeResult)
-                assert result.serverInfo.name == "gramps"
+                assert result.serverInfo.name == "gramps-genealogy"
 
                 tools_result = await session.list_tools()
                 tools = tools_result.tools
-                assert len(tools) == 45
+                assert len(tools) == len(TOOL_REGISTRY)
 
+                # Tools that must stay available; new tools extend this set.
                 expected_tools = {
                     # Search & Discovery
                     "find_type", "find_anything", "get_type",
@@ -104,7 +186,8 @@ class TestMCPServerSetup:
                 }
 
                 registered_tool_names = {tool.name for tool in tools}
-                assert registered_tool_names == expected_tools
+                assert expected_tools <= registered_tool_names
+                assert registered_tool_names == set(TOOL_REGISTRY)
     
     @pytest.mark.asyncio
     async def test_tool_descriptions(self):
@@ -138,7 +221,7 @@ class TestHTTPRoutes:
             assert response.status_code == 200
             data = response.json()
             assert data["service"] == "Gramps MCP Server"
-            assert data["tools_count"] == 45
+            assert data["tools_count"] == len(TOOL_REGISTRY)
 
     @pytest.mark.asyncio
     async def test_health_endpoint(self):
@@ -168,7 +251,7 @@ class TestMCPProtocolCompliance:
                 
                 # List tools
                 tools_result = await session.list_tools()
-                assert len(tools_result.tools) == 45
+                assert len(tools_result.tools) == len(TOOL_REGISTRY)
     
     @pytest.mark.asyncio
     async def test_mcp_tool_call_find_type_real_api(self):

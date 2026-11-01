@@ -16,6 +16,8 @@ from src.gramps_mcp.tools.search_details import get_type_tool
 # Load environment variables
 load_dotenv()
 
+pytestmark = pytest.mark.usefixtures("live_backend")
+
 def extract_gramps_id_from_search(search_text: str):
     """Extract gramps_id from search result text."""
     # Format: Name (gender) - gramps_id - [handle]
@@ -30,10 +32,10 @@ def extract_gramps_id_from_search(search_text: str):
 async def test_get_person_tool():
     """Test get_type_tool provides comprehensive person data with timeline."""
     
-    # Use specific person I0001 - first find the handle
+    # Use specific person I0003 (the fixture's child, so it has parents)
     search_result = await find_type_tool({
         "type": "person",
-        "gql": "gramps_id=\"I0001\""
+        "gql": "gramps_id=\"I0003\""
     })
     
     # Extract handle from search results
@@ -41,13 +43,13 @@ async def test_get_person_tool():
     if "Found" in search_text and "Found 0" not in search_text:
         lines = search_text.split('\n')
         for line in lines:
-            if "[" in line and "]" in line and "I0001" in line:
+            if "[" in line and "]" in line and "I0003" in line:
                 # Extract handle from brackets
                 start = line.rfind("[")
                 end = line.rfind("]")
                 handle = line[start+1:end]
                 
-                # Get comprehensive details report for person I0001
+                # Get comprehensive details report for person I0003
                 result = await get_type_tool({
                     "type": "person",
                     "handle": handle,
@@ -66,7 +68,7 @@ async def test_get_person_tool():
                 assert len(text.strip()) > 50  # Should have basic content
                 
                 # Should contain structured person header: Name (Gender) - ID - [handle]
-                assert f" - I0001 - [{handle}]" in text
+                assert f" - I0003 - [{handle}]" in text
                 assert "(" in text and ")" in text  # Should have gender in parentheses
                 
                 # Should contain at least one of these life events
@@ -90,9 +92,9 @@ async def test_get_person_tool():
                 assert "Attached notes:" in text, "Should have attached notes"
                 break
         else:
-            pytest.skip("Person I0001 not found in search results")
+            pytest.fail("Person I0003 not found in search results")
     else:
-        pytest.skip("Person I0001 not found in tree")
+        pytest.fail(f"Person I0003 not found in tree: {search_text}")
 
 
 @pytest.mark.asyncio
@@ -173,8 +175,8 @@ async def test_get_family_tool():
                 assert " (" in mother_line and ") - " in mother_line, "Mother should be in Name (Gender) - ID format"
                 
                 # Should contain marriage information
-                assert "Married:" in text, "Should have marriage information"
-                marriage_section = text.split("Married:")[1].split("TIMELINE:")[0].strip()
+                assert "Verheiratet:" in text, "Should have marriage information"
+                marriage_section = text.split("Verheiratet:")[1].split("TIMELINE:")[0].strip()
                 assert marriage_section, "Marriage should have date or place"
                 
                 # Should have children properly listed
@@ -195,6 +197,6 @@ async def test_get_family_tool():
                 assert "Attached notes:" in text, "Should have attached notes"
                 break
         else:
-            pytest.skip("Family F0001 not found in search results")
+            pytest.fail("Family F0001 not found in search results")
     else:
-        pytest.skip("Family F0001 not found in tree")
+        pytest.fail(f"Family F0001 not found in tree: {search_text}")

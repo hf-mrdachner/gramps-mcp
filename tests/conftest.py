@@ -279,4 +279,95 @@ from conftest_sqlite import (  # noqa: E402
     sqlite_conn,
     sqlite_db,
     sqlite_client,
+    write_fixture_db,
 )
+
+
+# ---------------------------------------------------------------------------
+# Backend selection for tool-level integration tests
+# ---------------------------------------------------------------------------
+
+def web_backend_enabled() -> bool:
+    """
+    Return True when the tests were explicitly pointed at a live Gramps Web API.
+
+    Reason: an explicit opt-in instead of "GRAMPS_API_URL is set", because the
+    test modules call load_dotenv() and these tests create records. A developer's
+    .env with real credentials must never send test data to a real family tree.
+
+    Returns:
+        bool: True if GRAMPS_TEST_BACKEND is set to "web".
+    """
+    return os.environ.get("GRAMPS_TEST_BACKEND", "").lower() == "web"
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests marked ``webapi`` unless the Web API backend was opted into."""
+    if web_backend_enabled():
+        return
+    skip_web = pytest.mark.skip(
+        reason="needs a live Gramps Web API (set GRAMPS_TEST_BACKEND=web)"
+    )
+    for item in items:
+        if "webapi" in item.keywords:
+            item.add_marker(skip_web)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolated_environment():
+    """
+    Keep a developer's Gramps configuration away from the tests.
+
+    Reason: some tests that don't use ``live_backend`` still build a client from
+    the environment, and would log in to a configured real instance. Runs after
+    collection, so it also covers what the test modules' load_dotenv() added.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        patch.delenv("GRAMPS_DB_PATH", raising=False)
+        patch.delenv("GRAMPS_PRIVACY_MODE", raising=False)
+        if not web_backend_enabled():
+            for name in ("GRAMPS_API_URL", "GRAMPS_USERNAME", "GRAMPS_PASSWORD"):
+                patch.delenv(name, raising=False)
+        yield
+
+
+def _reset_client_singletons() -> None:
+    """
+    Drop the cached backend client so the next get_client() re-reads the env.
+
+    Reason: the suite imports the package under two names (``src.gramps_mcp`` and
+    ``gramps_mcp``), and each module instance holds its own singleton.
+    """
+    for module_name in ("src.gramps_mcp.client", "gramps_mcp.client"):
+        module = sys.modules.get(module_name)
+        if module is not None:
+            module._close_singleton()
+            module._direct_client_path = ""
+
+
+@pytest.fixture(scope="module")
+def live_backend(tmp_path_factory):
+    """
+    Point the tools at a real backend for the duration of one test module.
+
+    By default every module gets its own throwaway SQLite file seeded with the
+    synthetic fixture data, so tests can chain writes without affecting others.
+    GRAMPS_DB_PATH is always overridden, which also keeps a configured real
+    database out of reach. With GRAMPS_TEST_BACKEND=web the configured Web API
+    is used instead.
+
+    Yields:
+        str: "web", or the path of the temporary SQLite database.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        _reset_client_singletons()
+        if web_backend_enabled():
+            patch.delenv("GRAMPS_DB_PATH", raising=False)
+            yield "web"
+        else:
+            db_path = tmp_path_factory.mktemp("live_backend") / "sqlite.db"
+            write_fixture_db(db_path)
+            patch.setenv("GRAMPS_DB_PATH", str(db_path))
+            patch.delenv("GRAMPS_API_URL", raising=False)
+            yield str(db_path)
+        _reset_client_singletons()
